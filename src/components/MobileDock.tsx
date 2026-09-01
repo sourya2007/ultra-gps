@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Icon } from './Icon';
 
 export type DockTab = 'map' | 'telemetry' | 'analysis';
@@ -6,7 +6,6 @@ export type DockTab = 'map' | 'telemetry' | 'analysis';
 interface MobileDockProps {
   activeTab: DockTab;
   onChangeTab: (tab: DockTab) => void;
-  children?: React.ReactNode;
 }
 
 const tabs: { key: DockTab; label: string; icon: string }[] = [
@@ -19,13 +18,9 @@ export const MobileDock: React.FC<MobileDockProps> = ({
   activeTab,
   onChangeTab,
 }) => {
-  useEffect(() => {
-    /* No-op for now */
-  }, []);
-
   return (
     <nav
-      className="fixed bottom-0 inset-x-0 z-[600] lg:hidden"
+      className="fixed bottom-0 inset-x-0 z-[600]"
       style={{
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',
         background: 'var(--color-bg-primary)',

@@ -9,12 +9,95 @@ import { SimulatorControls } from './components/SimulatorControls';
 import { AIArchitectureModal } from './components/AIArchitectureModal';
 import { MobileDock, type DockTab } from './components/MobileDock';
 import { CompassDial } from './components/CompassDial';
+import type { Coordinates, HeadingData, NavigationMetrics, SensorStatus, TrackingMode, PathPoint } from './types';
+import type { AIInferenceMetrics } from './types';
 
 const PAGE_TITLE: Record<DockTab, string> = {
   map: 'Map',
   telemetry: 'Telemetry',
   analysis: 'Analysis',
 };
+
+const DOCK_HEIGHT = 64;
+
+const HEADER_HEIGHT = 64;
+
+interface MapBlockProps {
+  location: Coordinates;
+  heading: number;
+  mode: TrackingMode;
+  path: PathPoint[];
+  hasReceivedFix: boolean;
+  setManualLocation: (lat: number, lng: number) => void;
+  acquireCurrentLocation: () => void;
+}
+
+const MapBlock: React.FC<MapBlockProps> = ({
+  location,
+  heading,
+  mode,
+  path,
+  hasReceivedFix,
+  setManualLocation,
+  acquireCurrentLocation,
+}) => (
+  <div
+    className="w-full h-full rounded-3xl md:rounded-2xl overflow-hidden"
+    style={{
+      background: 'var(--color-canvas-bg)',
+      position: 'relative',
+      border: '1px solid var(--color-border)',
+      minHeight: 0,
+    }}
+  >
+    <MapView
+      location={location}
+      heading={heading}
+      mode={mode}
+      path={path}
+      hasReceivedFix={hasReceivedFix}
+      onSetLocation={setManualLocation}
+      onLocateNow={acquireCurrentLocation}
+      isSidebarOpen={false}
+    />
+  </div>
+);
+
+interface TelemetryProps {
+  mode: TrackingMode;
+  location: Coordinates;
+  headingData: HeadingData;
+  navigationMetrics: NavigationMetrics;
+  sensorStatus: SensorStatus;
+  aiMetrics: AIInferenceMetrics;
+  gpsEnabled: boolean;
+  toggleGps: () => void;
+  requestSensorPermissions: () => void;
+}
+
+const TelemetryBlock: React.FC<TelemetryProps> = ({
+  mode,
+  location,
+  headingData,
+  navigationMetrics,
+  sensorStatus,
+  aiMetrics,
+  gpsEnabled,
+  toggleGps,
+  requestSensorPermissions,
+}) => (
+  <TelemetryPanel
+    mode={mode}
+    location={location}
+    headingData={headingData}
+    navigationMetrics={navigationMetrics}
+    sensorStatus={sensorStatus}
+    aiMetrics={aiMetrics}
+    gpsEnabled={gpsEnabled}
+    onToggleGps={toggleGps}
+    onRequestPermissions={requestSensorPermissions}
+  />
+);
 
 export const App: React.FC = () => {
   const {
@@ -34,6 +117,28 @@ export const App: React.FC = () => {
 
   const [isArchitectureOpen, setIsArchitectureOpen] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<DockTab>('map');
+
+  const mapProps: MapBlockProps = {
+    location: state.currentLocation,
+    heading: state.headingData.heading,
+    mode: state.mode,
+    path: state.pathHistory,
+    hasReceivedFix: state.hasReceivedFix,
+    setManualLocation,
+    acquireCurrentLocation,
+  };
+
+  const telemetryProps: TelemetryProps = {
+    mode: state.mode,
+    location: state.currentLocation,
+    headingData: state.headingData,
+    navigationMetrics: state.navigationMetrics,
+    sensorStatus,
+    aiMetrics,
+    gpsEnabled,
+    toggleGps,
+    requestSensorPermissions,
+  };
 
   return (
     <div
@@ -56,123 +161,104 @@ export const App: React.FC = () => {
         onToggleSidebar={undefined}
       />
 
-      {/* Page content */}
+      {/* Page content. paddingTop accounts for fixed header; paddingBottom for fixed bottom dock. */}
       <main
-        className="flex-1 overflow-y-auto scrollbar-hide"
+        className="flex-1 min-h-0 overflow-y-auto md:overflow-hidden scrollbar-hide"
         style={{
-          paddingTop: 64,
-          paddingBottom: 'calc(64px + env(safe-area-inset-bottom, 0px))',
+          paddingTop: HEADER_HEIGHT,
+          paddingBottom: `calc(${DOCK_HEIGHT}px + env(safe-area-inset-bottom, 0px))`,
           background: 'var(--color-bg-primary)',
         }}
       >
         {/* MAP page */}
         {activeTab === 'map' && (
-          <div className="flex flex-col gap-3 p-4">
+          <div
+            className="flex flex-col gap-3 p-4
+                       md:grid md:grid-cols-[minmax(0,1fr)_380px] md:gap-4 md:p-5
+                       lg:grid-cols-[minmax(0,1fr)_420px] lg:gap-5 lg:p-6
+                       md:h-full md:overflow-hidden"
+          >
             <div
-              className="w-full rounded-3xl overflow-hidden"
-              style={{
-                height: 'min(42vh, 360px)',
-                background: 'var(--color-canvas-bg)',
-                position: 'relative',
-                border: '1px solid var(--color-border)',
-              }}
+              className="h-[min(42vh,380px)] md:h-full md:min-h-0"
             >
-              <MapView
-                location={state.currentLocation}
-                heading={state.headingData.heading}
-                mode={state.mode}
-                path={state.pathHistory}
-                hasReceivedFix={state.hasReceivedFix}
-                onSetLocation={setManualLocation}
-                onLocateNow={acquireCurrentLocation}
-                isSidebarOpen={false}
-              />
+              <MapBlock {...mapProps} />
             </div>
 
-            <TelemetryPanel
-              mode={state.mode}
-              location={state.currentLocation}
-              headingData={state.headingData}
-              navigationMetrics={state.navigationMetrics}
-              sensorStatus={sensorStatus}
-              aiMetrics={aiMetrics}
-              gpsEnabled={gpsEnabled}
-              onToggleGps={toggleGps}
-              onRequestPermissions={requestSensorPermissions}
-            />
+            <div
+              className="md:overflow-y-auto md:pr-1 md:min-h-0 scrollbar-hide"
+            >
+              <TelemetryBlock {...telemetryProps} />
+            </div>
           </div>
         )}
 
         {/* TELEMETRY page */}
         {activeTab === 'telemetry' && (
-          <div className="flex flex-col gap-3 p-4">
+          <div
+            className="flex flex-col gap-3 p-4
+                       md:grid md:grid-cols-[minmax(0,1fr)_380px] md:gap-4 md:p-5
+                       lg:grid-cols-[minmax(0,1fr)_420px] lg:gap-5 lg:p-6
+                       md:h-full md:overflow-hidden"
+          >
             <div
-              className="w-full rounded-3xl overflow-hidden"
-              style={{
-                height: 'min(38vh, 320px)',
-                background: 'var(--color-canvas-bg)',
-                position: 'relative',
-                border: '1px solid var(--color-border)',
-              }}
+              className="flex flex-col gap-3 md:min-h-0 md:h-full md:overflow-y-auto scrollbar-hide"
             >
-              <MapView
-                location={state.currentLocation}
-                heading={state.headingData.heading}
-                mode={state.mode}
-                path={state.pathHistory}
-                hasReceivedFix={state.hasReceivedFix}
-                onSetLocation={setManualLocation}
-                onLocateNow={acquireCurrentLocation}
-                isSidebarOpen={false}
+              <div className="h-[min(34vh,320px)] md:flex-none">
+                <MapBlock {...mapProps} />
+              </div>
+              <CompassDial
+                headingData={state.headingData}
+                navigationMetrics={state.navigationMetrics}
+                sensorStatus={sensorStatus}
               />
             </div>
 
-            <TelemetryPanel
-              mode={state.mode}
-              location={state.currentLocation}
-              headingData={state.headingData}
-              navigationMetrics={state.navigationMetrics}
-              sensorStatus={sensorStatus}
-              aiMetrics={aiMetrics}
-              gpsEnabled={gpsEnabled}
-              onToggleGps={toggleGps}
-              onRequestPermissions={requestSensorPermissions}
-            />
-
-            <CompassDial
-              headingData={state.headingData}
-              navigationMetrics={state.navigationMetrics}
-              sensorStatus={sensorStatus}
-            />
+            <div
+              className="md:overflow-y-auto md:pr-1 md:min-h-0 scrollbar-hide"
+            >
+              <TelemetryBlock {...telemetryProps} />
+            </div>
           </div>
         )}
 
         {/* ANALYSIS page */}
         {activeTab === 'analysis' && (
-          <div className="flex flex-col gap-3 p-4">
-            <SensorWaveform
-              recentMotion={state.recentMotion}
-              peakThreshold={0.25}
-            />
+          <div
+            className="flex flex-col gap-3 p-4
+                       md:grid md:grid-cols-[minmax(0,1fr)_380px] md:gap-4 md:p-5
+                       lg:grid-cols-[minmax(0,1fr)_420px] lg:gap-5 lg:p-6
+                       md:h-full md:overflow-hidden"
+          >
+            <div
+              className="md:overflow-y-auto md:pr-1 md:min-h-0 scrollbar-hide"
+            >
+              <SensorWaveform
+                recentMotion={state.recentMotion}
+                peakThreshold={0.25}
+              />
+            </div>
 
-            <AIModelStatusPanel
-              aiMetrics={aiMetrics}
-              onOpenArchitecture={() => setIsArchitectureOpen(true)}
-            />
-
-            <SimulatorControls
-              isSimulating={sensorStatus.isSimulating}
-              currentHeading={state.headingData.heading}
-              onInjectSample={injectSample}
-              onToggleSimulator={toggleMotionSimulator}
-              onSetHeading={setManualHeading}
-              onResetTracking={resetTracking}
-            />
+            <div
+              className="flex flex-col gap-3 md:overflow-y-auto md:pr-1 md:min-h-0 scrollbar-hide"
+            >
+              <AIModelStatusPanel
+                aiMetrics={aiMetrics}
+                onOpenArchitecture={() => setIsArchitectureOpen(true)}
+              />
+              <SimulatorControls
+                isSimulating={sensorStatus.isSimulating}
+                currentHeading={state.headingData.heading}
+                onInjectSample={injectSample}
+                onToggleSimulator={toggleMotionSimulator}
+                onSetHeading={setManualHeading}
+                onResetTracking={resetTracking}
+              />
+            </div>
           </div>
         )}
       </main>
 
-      {/* Bottom tab bar */}
+      {/* Bottom tab bar — visible on all sizes */}
       <MobileDock activeTab={activeTab} onChangeTab={setActiveTab} />
 
       {/* AI Architecture Modal */}
