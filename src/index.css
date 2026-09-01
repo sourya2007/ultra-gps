@@ -3,151 +3,151 @@
 @import "tailwindcss";
 
 /* ============================================================
-   DESIGN TOKENS — CSS Custom Properties (Light / Dark)
+   DESIGN TOKENS — Material 3 derived (light green accent)
+   Dark theme: pure black surfaces
+   Light theme: pure white surfaces
    ============================================================ */
 
 :root,
 [data-theme="light"] {
-  /* Surface hierarchy */
-  --color-bg-primary:    #f8f9fb;
+  /* Surface hierarchy (light theme = pure white stack) */
+  --color-bg-primary:    #ffffff;
   --color-bg-secondary:  #ffffff;
-  --color-bg-tertiary:   #f1f3f5;
-  --color-bg-elevated:   rgba(255, 255, 255, 0.6);
-  --color-bg-inset:      rgba(233, 236, 239, 0.5);
+  --color-bg-tertiary:   #ffffff;
+  --color-bg-elevated:   #ffffff;
+  --color-bg-inset:      #f5f5f5;
   --color-bg-overlay:    rgba(0, 0, 0, 0.45);
-  --color-glass-bg:      rgba(255, 255, 255, 0.65);
-  --color-glass-border:  rgba(255, 255, 255, 0.5);
 
   /* Text hierarchy */
-  --color-text-primary:   #1a1a2e;
-  --color-text-secondary: #5a5f72;
-  --color-text-tertiary:  #8b90a0;
+  --color-text-primary:   #1a1c19;
+  --color-text-secondary: #5a5d57;
+  --color-text-tertiary:  #8b8e87;
   --color-text-inverse:   #ffffff;
 
   /* Borders */
-  --color-border:         #e0e3e8;
-  --color-border-subtle:  #ebedf0;
+  --color-border:         #e1e3df;
+  --color-border-subtle:  #eef0ec;
 
-  /* Accent palette */
-  --color-accent:         #1a73e8;
-  --color-accent-soft:    rgba(26, 115, 232, 0.08);
-  --color-accent-hover:   rgba(26, 115, 232, 0.14);
-  --color-accent-text:    #1a73e8;
+  /* Accent palette — light green */
+  --color-accent:         #426910;
+  --color-accent-soft:    rgba(66, 105, 16, 0.10);
+  --color-accent-hover:   rgba(66, 105, 16, 0.18);
+  --color-accent-text:    #426910;
+  --color-accent-strong:  #a7d471;
 
   /* Semantic colors */
-  --color-success:        #0d9e6c;
-  --color-success-soft:   rgba(13, 158, 108, 0.08);
-  --color-success-text:   #0d9e6c;
+  --color-success:        #2e7d32;
+  --color-success-soft:   rgba(46, 125, 50, 0.10);
+  --color-success-text:   #2e7d32;
 
-  --color-warning:        #e8a300;
-  --color-warning-soft:   rgba(232, 163, 0, 0.08);
+  --color-warning:        #b57e00;
+  --color-warning-soft:   rgba(181, 126, 0, 0.10);
   --color-warning-text:   #b57e00;
 
-  --color-error:          #d93025;
-  --color-error-soft:     rgba(217, 48, 37, 0.08);
-  --color-error-text:     #d93025;
+  --color-error:          #b3261e;
+  --color-error-soft:     rgba(179, 38, 30, 0.10);
+  --color-error-text:     #b3261e;
 
-  --color-info:           #1a73e8;
-  --color-info-soft:      rgba(26, 115, 232, 0.08);
+  --color-info:           #426910;
+  --color-info-soft:      rgba(66, 105, 16, 0.10);
 
-  --color-violet:         #7c3aed;
-  --color-violet-soft:    rgba(124, 58, 237, 0.08);
+  --color-violet:         #6750a4;
+  --color-violet-soft:    rgba(103, 80, 164, 0.10);
 
   /* Canvas-specific backgrounds */
-  --color-canvas-bg:      #e8eaed;
+  --color-canvas-bg:      #ffffff;
 
   /* Waveform */
-  --color-waveform-bg:    #f4f5f7;
-  --color-waveform-grid:  #dde1e6;
+  --color-waveform-bg:    #0a0a0a;
+  --color-waveform-grid:  #1f1f1f;
 
   /* Scrollbar */
-  --color-scrollbar-track: #f1f3f5;
-  --color-scrollbar-thumb: #c4c9d1;
-  --color-scrollbar-hover: #a8aeb8;
+  --color-scrollbar-track: #f5f5f5;
+  --color-scrollbar-thumb: #c4c7c0;
+  --color-scrollbar-hover: #a8aaa3;
 
   /* Shadows */
-  --shadow-sm:   0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-md:   0 4px 12px rgba(0,0,0,0.07), 0 1px 3px rgba(0,0,0,0.04);
-  --shadow-lg:   0 8px 28px rgba(0,0,0,0.10), 0 2px 8px rgba(0,0,0,0.04);
-  --shadow-xl:   0 16px 48px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.06);
+  --shadow-sm:   0 1px 2px rgba(0,0,0,0.06);
+  --shadow-md:   0 2px 6px rgba(0,0,0,0.08);
+  --shadow-lg:   0 4px 16px rgba(0,0,0,0.10);
+  --shadow-xl:   0 8px 28px rgba(0,0,0,0.12);
 
   /* Radius */
   --radius-sm:   8px;
   --radius-md:   12px;
   --radius-lg:   16px;
-  --radius-xl:   20px;
+  --radius-xl:   24px;
   --radius-full: 9999px;
 }
 
 [data-theme="dark"] {
-  /* Surface hierarchy */
-  --color-bg-primary:    #0f1117;
-  --color-bg-secondary:  #181b23;
-  --color-bg-tertiary:   #1e2230;
-  --color-bg-elevated:   rgba(30, 34, 48, 0.6);
-  --color-bg-inset:      rgba(11, 13, 18, 0.5);
+  /* Surface hierarchy — pure black stack */
+  --color-bg-primary:    #131313;
+  --color-bg-secondary:  #131313;
+  --color-bg-tertiary:   #131313;
+  --color-bg-elevated:   #201f1f;
+  --color-bg-inset:      #201f1f;
   --color-bg-overlay:    rgba(0, 0, 0, 0.70);
-  --color-glass-bg:      rgba(24, 27, 35, 0.65);
-  --color-glass-border:  rgba(255, 255, 255, 0.08);
 
   /* Text hierarchy */
-  --color-text-primary:   #eaedf3;
-  --color-text-secondary: #8b92a8;
-  --color-text-tertiary:  #5a6178;
-  --color-text-inverse:   #0f1117;
+  --color-text-primary:   #e5e2e1;
+  --color-text-secondary: #c3c9b6;
+  --color-text-tertiary:  #8d9382;
+  --color-text-inverse:   #131313;
 
   /* Borders */
-  --color-border:         #272c3a;
-  --color-border-subtle:  #1e2230;
+  --color-border:         #353534;
+  --color-border-subtle:  #2a2a29;
 
-  /* Accent palette */
-  --color-accent:         #89b4fa;
-  --color-accent-soft:    rgba(137, 180, 250, 0.10);
-  --color-accent-hover:   rgba(137, 180, 250, 0.18);
-  --color-accent-text:    #89b4fa;
+  /* Accent palette — light green */
+  --color-accent:         #c3f38b;
+  --color-accent-soft:    rgba(195, 243, 139, 0.14);
+  --color-accent-hover:   rgba(195, 243, 139, 0.22);
+  --color-accent-text:    #c3f38b;
+  --color-accent-strong:  #a7d471;
 
   /* Semantic colors */
-  --color-success:        #34d399;
-  --color-success-soft:   rgba(52, 211, 153, 0.10);
-  --color-success-text:   #34d399;
+  --color-success:        #c3f38b;
+  --color-success-soft:   rgba(195, 243, 139, 0.14);
+  --color-success-text:   #c3f38b;
 
   --color-warning:        #fbbf24;
-  --color-warning-soft:   rgba(251, 191, 36, 0.10);
+  --color-warning-soft:   rgba(251, 191, 36, 0.14);
   --color-warning-text:   #fbbf24;
 
-  --color-error:          #f87171;
-  --color-error-soft:     rgba(248, 113, 113, 0.10);
-  --color-error-text:     #f87171;
+  --color-error:          #ffb4ab;
+  --color-error-soft:     rgba(255, 180, 171, 0.14);
+  --color-error-text:     #ffb4ab;
 
-  --color-info:           #89b4fa;
-  --color-info-soft:      rgba(137, 180, 250, 0.10);
+  --color-info:           #c3f38b;
+  --color-info-soft:      rgba(195, 243, 139, 0.14);
 
-  --color-violet:         #a78bfa;
-  --color-violet-soft:    rgba(167, 139, 250, 0.10);
+  --color-violet:         #c2f18a;
+  --color-violet-soft:    rgba(194, 241, 138, 0.14);
 
   /* Canvas */
-  --color-canvas-bg:      #0b0d12;
+  --color-canvas-bg:      #0e0e0e;
 
   /* Waveform */
-  --color-waveform-bg:    #0b0d12;
-  --color-waveform-grid:  #1e2230;
+  --color-waveform-bg:    #0a0a0a;
+  --color-waveform-grid:  #1f1f1f;
 
   /* Scrollbar */
-  --color-scrollbar-track: #0f1117;
-  --color-scrollbar-thumb: #272c3a;
-  --color-scrollbar-hover: #3a4050;
+  --color-scrollbar-track: #131313;
+  --color-scrollbar-thumb: #2a2a2a;
+  --color-scrollbar-hover: #3a3a3a;
 
   /* Shadows */
-  --shadow-sm:   0 1px 3px rgba(0,0,0,0.30);
-  --shadow-md:   0 4px 12px rgba(0,0,0,0.35);
-  --shadow-lg:   0 8px 28px rgba(0,0,0,0.40);
-  --shadow-xl:   0 16px 48px rgba(0,0,0,0.50);
+  --shadow-sm:   0 1px 2px rgba(0,0,0,0.40);
+  --shadow-md:   0 2px 8px rgba(0,0,0,0.50);
+  --shadow-lg:   0 4px 16px rgba(0,0,0,0.55);
+  --shadow-xl:   0 8px 28px rgba(0,0,0,0.60);
 
   /* Same radius */
   --radius-sm:   8px;
   --radius-md:   12px;
   --radius-lg:   16px;
-  --radius-xl:   20px;
+  --radius-xl:   24px;
   --radius-full: 9999px;
 }
 
@@ -171,7 +171,8 @@
     color: var(--color-text-primary);
     font-family: 'Google Sans Flex', 'Google Sans Text', 'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     font-optical-sizing: auto;
-    transition: background-color 0.35s ease, color 0.35s ease;
+    -webkit-tap-highlight-color: transparent;
+    transition: background-color 0.25s ease, color 0.25s ease;
   }
 }
 
@@ -206,31 +207,21 @@
 
 
 /* ============================================================
-   COMPONENT UTILITY CLASSES
+   COMPONENT UTILITY CLASSES — flat, no glass
    ============================================================ */
 
-/* Card surface */
+/* Card surface — solid, slightly elevated in dark theme */
 .surface-card {
   background: var(--color-bg-elevated);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
-  transition: background-color 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease;
+  transition: background-color 0.25s ease, border-color 0.25s ease;
 }
 
-.surface-card:hover {
-  box-shadow: var(--shadow-md);
-}
-
-/* Glass surface */
+/* Glass surface — re-purposed as plain solid (no blur) */
 .surface-glass {
-  background: var(--color-glass-bg);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
-  border: 1px solid var(--color-glass-border);
-  box-shadow: var(--shadow-lg);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
 }
 
@@ -239,7 +230,7 @@
   background: var(--color-bg-inset);
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-sm);
-  transition: background-color 0.35s ease, border-color 0.35s ease;
+  transition: background-color 0.25s ease, border-color 0.25s ease;
 }
 
 /* Pill badge */
@@ -288,7 +279,7 @@
   gap: 6px;
   padding: 6px 14px;
   border-radius: var(--radius-sm);
-  font-family: 'Google Sans Flex', 'Google Sans Text', 'Google Sans', sans-serif;
+  font-family: 'Google Sans Flex', 'Google Sans Text', sans-serif;
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
@@ -300,8 +291,7 @@
 }
 
 .btn:hover {
-  background: var(--color-bg-tertiary);
-  box-shadow: var(--shadow-sm);
+  background: var(--color-bg-inset);
 }
 
 .btn:active {
@@ -332,7 +322,7 @@
 
 .btn-primary {
   background: var(--color-accent);
-  color: #ffffff;
+  color: var(--color-text-inverse);
   border-color: transparent;
 }
 
@@ -349,7 +339,7 @@
   background: var(--color-bg-inset);
   border: 1px solid var(--color-border);
   cursor: pointer;
-  transition: background-color 0.35s ease, border-color 0.35s ease;
+  transition: background-color 0.25s ease, border-color 0.25s ease;
   flex-shrink: 0;
 }
 
@@ -362,8 +352,8 @@
   height: 18px;
   border-radius: 50%;
   background: var(--color-accent);
-  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1),
-              background-color 0.35s ease;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              background-color 0.25s ease;
   box-shadow: 0 1px 3px rgba(0,0,0,0.2);
 }
 
@@ -380,7 +370,7 @@
   width: 100%;
   height: 100%;
   background-color: var(--color-canvas-bg);
-  transition: background-color 0.35s ease;
+  transition: background-color 0.25s ease;
 }
 
 .custom-location-marker {
@@ -390,12 +380,12 @@
 
 
 /* ============================================================
-   SCROLLBAR
+   SCROLLBAR — hide for mobile-feel
    ============================================================ */
 
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 0;
+  height: 0;
 }
 
 ::-webkit-scrollbar-track {
@@ -429,12 +419,10 @@
   flex-shrink: 0;
 }
 
-/* Smooth section transitions */
 .panel-section {
-  transition: background-color 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease;
+  transition: background-color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
-/* Monospace metric values */
 .metric-value {
   font-family: 'Google Sans Mono', 'JetBrains Mono', 'Fira Code', monospace;
   font-weight: 500;
@@ -478,7 +466,6 @@ input[type="range"]::-webkit-slider-thumb:hover {
   transform: scale(1.15);
 }
 
-/* Hide scrollbar but keep scrolling */
 .scrollbar-hide {
   scrollbar-width: none;
   -ms-overflow-style: none;

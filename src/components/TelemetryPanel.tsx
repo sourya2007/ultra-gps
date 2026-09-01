@@ -28,14 +28,9 @@ export const TelemetryPanel: React.FC<TelemetryPanelProps> = ({
 
   return (
     <div className="flex flex-col gap-3 w-full">
-      {/* Top Status & GPS Control Header — desktop only */}
-      <div className="surface-card hidden lg:flex flex-col gap-3 p-4">
-        <div
-          className="flex flex-wrap items-center justify-between gap-2 pb-3"
-          style={{ borderBottom: '1px solid var(--color-border-subtle)' }}
-        >
+      {/* Top status bar */}
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1">
         <div className="flex items-center gap-2">
-          {/* Mode Badge */}
           <div
             className="badge"
             style={{
@@ -64,7 +59,6 @@ export const TelemetryPanel: React.FC<TelemetryPanelProps> = ({
             {isAi ? 'AI MLP (WebGPU)' : mode === 'GPS' ? 'GPS Active' : 'Acquiring Position'}
           </div>
 
-          {/* Pipeline Tag */}
           <div
             className="badge"
             style={{
@@ -78,7 +72,6 @@ export const TelemetryPanel: React.FC<TelemetryPanelProps> = ({
           </div>
         </div>
 
-        {/* Controls */}
         <div className="flex items-center gap-2">
           <button onClick={onToggleGps} className="btn btn-accent">
             <Icon name="cell_tower" size={14} style={{ color: 'var(--color-accent-text)' }} />
@@ -92,12 +85,11 @@ export const TelemetryPanel: React.FC<TelemetryPanelProps> = ({
             </button>
           )}
         </div>
-        </div>
       </div>
 
-      {/* Sensor Health Diagnostic Line — desktop only */}
+      {/* Sensor health diagnostic line */}
       <div
-        className="surface-inset hidden lg:flex items-center justify-between px-3 py-2 text-xs"
+        className="surface-inset flex items-center justify-between px-3 py-2 text-xs"
       >
         <div className="flex items-center gap-2 truncate" style={{ color: 'var(--color-text-secondary)' }}>
           <Icon name="satellite_alt" size={14} style={{ color: 'var(--color-accent)' }} />
@@ -113,63 +105,165 @@ export const TelemetryPanel: React.FC<TelemetryPanelProps> = ({
         </div>
       </div>
 
-      {/* Main Telemetry Grid (Bento Boxes) */}
+      {/* Main Telemetry Bento Grid */}
       <div className="grid grid-cols-2 gap-3 w-full">
-        {/* Coordinates Box */}
-        <div className="surface-card p-3 lg:p-4 flex flex-col justify-between" style={{ minHeight: '88px' }}>
-          <div className="metric-label mb-2 tracking-widest text-[10px]" style={{ color: 'var(--color-text-primary)' }}>
+        {/* Coordinates */}
+        <div className="surface-card p-3 lg:p-4 flex flex-col justify-between border" style={{ minHeight: '96px' }}>
+          <div
+            className="font-label-caps text-label-caps text-on-surface-variant uppercase"
+            style={{
+              fontSize: '11px',
+              letterSpacing: '0.08em',
+              fontWeight: 700,
+              color: 'var(--color-text-tertiary)',
+            }}
+          >
             COORDINATES
           </div>
           <div>
-            <div className="metric-value text-[15px] lg:text-sm font-semibold truncate">
+            <div
+              style={{
+                fontFamily: "'Google Sans Mono', 'JetBrains Mono', monospace",
+                fontWeight: 500,
+                fontSize: '22px',
+                lineHeight: '28px',
+                color: 'var(--color-text-primary)',
+              }}
+            >
               {location.latitude.toFixed(4)}° N
             </div>
-            <div className="metric-value text-[11px] truncate mt-0.5" style={{ color: 'var(--color-text-secondary)' }}>
+            <div
+              style={{
+                fontFamily: "'Google Sans Mono', 'JetBrains Mono', monospace",
+                fontWeight: 400,
+                fontSize: '14px',
+                lineHeight: '18px',
+                marginTop: 4,
+                color: 'var(--color-text-tertiary)',
+              }}
+            >
               {location.longitude.toFixed(4)}° E
             </div>
           </div>
         </div>
 
-        {/* Heading Box */}
-        <div className="surface-card p-3 lg:p-4 flex flex-col justify-between" style={{ minHeight: '88px' }}>
-          <div className="metric-label mb-2 tracking-widest text-[10px]" style={{ color: 'var(--color-text-primary)' }}>
+        {/* Heading */}
+        <div className="surface-card p-3 lg:p-4 flex flex-col justify-between border" style={{ minHeight: '96px' }}>
+          <div
+            className="font-label-caps text-label-caps uppercase"
+            style={{
+              fontSize: '11px',
+              letterSpacing: '0.08em',
+              fontWeight: 700,
+              color: 'var(--color-text-tertiary)',
+            }}
+          >
             HEADING
           </div>
           <div>
-            <div className="metric-value text-[15px] lg:text-sm font-semibold truncate">
+            <div
+              style={{
+                fontFamily: "'Google Sans Mono', 'JetBrains Mono', monospace",
+                fontWeight: 500,
+                fontSize: '22px',
+                lineHeight: '28px',
+                color: 'var(--color-text-primary)',
+              }}
+            >
               {Math.round(headingData.heading).toFixed(1)}°
             </div>
-            <div className="metric-value text-[11px] truncate mt-0.5" style={{ color: 'var(--color-text-secondary)' }}>
+            <div
+              style={{
+                fontFamily: "'Google Sans Mono', 'JetBrains Mono', monospace",
+                fontWeight: 400,
+                fontSize: '14px',
+                lineHeight: '18px',
+                marginTop: 4,
+                color: 'var(--color-text-tertiary)',
+              }}
+            >
               Magnetic
             </div>
           </div>
         </div>
 
-        {/* Speed Box */}
-        <div className="surface-card p-3 lg:p-4 flex flex-col justify-between" style={{ minHeight: '88px' }}>
-          <div className="metric-label mb-2 tracking-widest text-[10px]" style={{ color: 'var(--color-text-primary)' }}>
+        {/* Speed */}
+        <div className="surface-card p-3 lg:p-4 flex flex-col justify-between border" style={{ minHeight: '96px' }}>
+          <div
+            className="font-label-caps text-label-caps uppercase"
+            style={{
+              fontSize: '11px',
+              letterSpacing: '0.08em',
+              fontWeight: 700,
+              color: 'var(--color-text-tertiary)',
+            }}
+          >
             SPEED
           </div>
           <div>
-            <div className="metric-value text-[15px] lg:text-sm font-semibold truncate">
-              {(navigationMetrics.currentSpeedKmh / 3.6).toFixed(1)} m/s
+            <div
+              style={{
+                fontFamily: "'Google Sans Mono', 'JetBrains Mono', monospace",
+                fontWeight: 500,
+                fontSize: '22px',
+                lineHeight: '28px',
+                color: 'var(--color-text-primary)',
+              }}
+            >
+              {(navigationMetrics.currentSpeedKmh / 3.6).toFixed(1)}{' '}
+              <span style={{ fontSize: '14px', color: 'var(--color-text-tertiary)' }}>m/s</span>
             </div>
-            <div className="metric-value text-[11px] truncate mt-0.5" style={{ color: 'var(--color-text-secondary)' }}>
+            <div
+              style={{
+                fontFamily: "'Google Sans Mono', 'JetBrains Mono', monospace",
+                fontWeight: 400,
+                fontSize: '14px',
+                lineHeight: '18px',
+                marginTop: 4,
+                color: 'var(--color-text-tertiary)',
+              }}
+            >
               {navigationMetrics.currentSpeedKmh.toFixed(2)} km/h
             </div>
           </div>
         </div>
 
-        {/* Distance Box */}
-        <div className="surface-card p-3 lg:p-4 flex flex-col justify-between" style={{ minHeight: '88px' }}>
-          <div className="metric-label mb-2 tracking-widest text-[10px]" style={{ color: 'var(--color-text-primary)' }}>
+        {/* Distance */}
+        <div className="surface-card p-3 lg:p-4 flex flex-col justify-between border" style={{ minHeight: '96px' }}>
+          <div
+            className="font-label-caps text-label-caps uppercase"
+            style={{
+              fontSize: '11px',
+              letterSpacing: '0.08em',
+              fontWeight: 700,
+              color: 'var(--color-text-tertiary)',
+            }}
+          >
             DISTANCE
           </div>
           <div>
-            <div className="metric-value text-[15px] lg:text-sm font-semibold truncate">
-              {Math.round(navigationMetrics.totalDistanceMeters)} m
+            <div
+              style={{
+                fontFamily: "'Google Sans Mono', 'JetBrains Mono', monospace",
+                fontWeight: 500,
+                fontSize: '22px',
+                lineHeight: '28px',
+                color: 'var(--color-text-primary)',
+              }}
+            >
+              {Math.round(navigationMetrics.totalDistanceMeters)}{' '}
+              <span style={{ fontSize: '14px', color: 'var(--color-text-tertiary)' }}>m</span>
             </div>
-            <div className="metric-value text-[11px] truncate mt-0.5" style={{ color: 'var(--color-text-secondary)' }}>
+            <div
+              style={{
+                fontFamily: "'Google Sans Mono', 'JetBrains Mono', monospace",
+                fontWeight: 400,
+                fontSize: '14px',
+                lineHeight: '18px',
+                marginTop: 4,
+                color: 'var(--color-text-tertiary)',
+              }}
+            >
               Session Total
             </div>
           </div>

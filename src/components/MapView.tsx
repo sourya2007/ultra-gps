@@ -3,7 +3,6 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { Coordinates, PathPoint, TrackingMode } from '../types';
 import { Icon } from './Icon';
-import { useTheme } from '../context/ThemeContext';
 
 export type MapLayerType = 'satellite' | 'street' | 'dark';
 
@@ -41,7 +40,6 @@ export const MapView: React.FC<MapViewProps> = ({
 
   const [activeLayer, setActiveLayer] = useState<MapLayerType>('satellite');
   const [currentZoom, setCurrentZoom] = useState<number>(18);
-  const { isDark } = useTheme();
 
   const CARTO_API_KEY = 'cb1_2q2m_1_e92555c70605d55997b6b223';
 
@@ -309,32 +307,25 @@ export const MapView: React.FC<MapViewProps> = ({
     { key: 'dark', label: 'Dark', icon: 'layers' },
   ];
 
-  const mapBtnStyle: React.CSSProperties = {
-    background: isDark ? 'rgba(15, 17, 23, 0.9)' : 'rgba(255, 255, 255, 0.92)',
-    border: `1px solid ${isDark ? 'rgba(39, 44, 58, 0.9)' : 'rgba(224, 227, 232, 0.9)'}`,
-    backdropFilter: 'blur(12px)',
-    borderRadius: 'var(--radius-sm)',
-    boxShadow: 'var(--shadow-md)',
-    transition: 'all 0.4s cubic-bezier(0.2, 0, 0, 1)',
-    color: isDark ? '#eaedf3' : '#1a1a2e',
-    cursor: 'pointer',
-  };
-
   const dynamicLeftOffset = isSidebarOpen ? 'max(416px, 1rem)' : '1rem';
+
+  const overlaySurface: React.CSSProperties = {
+    background: 'var(--color-bg-elevated)',
+    border: '1px solid var(--color-border)',
+    borderRadius: 'var(--radius-full)',
+    boxShadow: 'var(--shadow-md)',
+    color: 'var(--color-text-primary)',
+  };
 
   return (
     <div className="relative w-full h-full overflow-hidden" style={{ background: 'var(--color-canvas-bg)' }}>
       <div ref={mapContainerRef} className="w-full h-full z-0" />
 
-      {/* Mobile status pill — centered at top of map */}
+      {/* Status pill — top center */}
       <div
-        className="absolute top-3 left-1/2 -translate-x-1/2 z-500 lg:hidden flex items-center gap-2 px-3 py-1.5 rounded-full"
+        className="absolute top-4 left-1/2 -translate-x-1/2 z-[500] flex items-center gap-2 px-3 py-1.5"
         style={{
-          background: isDark ? 'rgba(15, 17, 23, 0.85)' : 'rgba(255, 255, 255, 0.92)',
-          border: `1px solid ${isDark ? 'rgba(39, 44, 58, 0.9)' : 'rgba(224, 227, 232, 0.9)'}`,
-          backdropFilter: 'blur(12px)',
-          boxShadow: 'var(--shadow-md)',
-          color: isDark ? '#eaedf3' : '#1a1a2e',
+          ...overlaySurface,
           fontSize: '10px',
           fontWeight: 700,
           letterSpacing: '0.08em',
@@ -353,15 +344,16 @@ export const MapView: React.FC<MapViewProps> = ({
           : 'SEARCHING_GPS TRACKING'}
       </div>
 
-      {/* Layer Switcher */}
+      {/* Map Style Switcher — top-left, pill segmented control */}
       <div
-        className="absolute z-500 hidden lg:flex items-center gap-1 p-1"
+        className="absolute z-[500] flex items-center gap-1 p-1"
         style={{
-          ...mapBtnStyle,
+          ...overlaySurface,
           top: '1rem',
           left: dynamicLeftOffset,
           borderRadius: 'var(--radius-md)',
-          padding: '4px',
+          padding: 4,
+          boxShadow: 'var(--shadow-md)',
         }}
       >
         {layers.map(({ key, label, icon }) => (
@@ -376,7 +368,7 @@ export const MapView: React.FC<MapViewProps> = ({
               fontWeight: activeLayer === key ? 700 : 500,
               fontFamily: "'Google Sans Flex', 'Google Sans Text', sans-serif",
               background: activeLayer === key ? 'var(--color-accent)' : 'transparent',
-              color: activeLayer === key ? '#ffffff' : 'inherit',
+              color: activeLayer === key ? 'var(--color-text-inverse)' : 'inherit',
               border: 'none',
               cursor: 'pointer',
               transition: 'all 0.2s ease',
@@ -389,20 +381,22 @@ export const MapView: React.FC<MapViewProps> = ({
         ))}
       </div>
 
-      {/* Right Controls */}
-      <div className="absolute top-4 right-4 z-500 hidden lg:flex flex-col gap-2">
+      {/* Right Controls — circular, matching reference */}
+      <div className="absolute bottom-20 lg:bottom-6 right-4 z-[500] flex flex-col gap-2">
         <button
           onClick={handleCenterMap}
+          className="flex items-center justify-center"
           style={{
-            ...mapBtnStyle,
-            padding: '10px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
+            ...overlaySurface,
+            width: 48,
+            height: 48,
+            borderRadius: 'var(--radius-full)',
+            cursor: 'pointer',
           }}
-          title="Center & Locate GPS"
+          title="Recenter on user"
+          aria-label="Recenter on user"
         >
-          <Icon name="navigation" size={20} style={{ color: 'var(--color-accent)' }} filled />
+          <Icon name="explore" size={22} style={{ color: 'var(--color-text-primary)' }} />
         </button>
 
         <button
@@ -412,48 +406,52 @@ export const MapView: React.FC<MapViewProps> = ({
               mapInstanceRef.current.panTo([location.latitude, location.longitude]);
             }
           }}
+          className="flex items-center justify-center"
           style={{
-            ...mapBtnStyle,
-            padding: '10px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
+            ...overlaySurface,
+            width: 48,
+            height: 48,
+            borderRadius: 'var(--radius-full)',
+            cursor: 'pointer',
           }}
-          title="Re-lock Auto-Follow"
+          title="My location"
+          aria-label="My location"
         >
-          <Icon name="gps_fixed" size={20} style={{ color: 'var(--color-success)' }} />
+          <Icon name="my_location" size={22} style={{ color: 'var(--color-accent-text)' }} filled />
         </button>
 
         <div
           className="flex flex-col overflow-hidden"
           style={{
-            ...mapBtnStyle,
-            borderRadius: 'var(--radius-sm)',
+            ...overlaySurface,
+            borderRadius: 'var(--radius-full)',
             padding: 0,
           }}
         >
           <button
             onClick={handleZoomIn}
             style={{
-              padding: '8px',
+              width: 48,
+              height: 36,
               background: 'transparent',
               border: 'none',
-              borderBottom: `1px solid ${isDark ? '#272c3a' : '#e0e3e8'}`,
+              borderBottom: '1px solid var(--color-border)',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               color: 'inherit',
-              transition: 'background 0.15s ease',
             }}
             title="Zoom In"
+            aria-label="Zoom In"
           >
             <Icon name="add" size={18} />
           </button>
           <button
             onClick={handleZoomOut}
             style={{
-              padding: '8px',
+              width: 48,
+              height: 36,
               background: 'transparent',
               border: 'none',
               cursor: 'pointer',
@@ -461,42 +459,12 @@ export const MapView: React.FC<MapViewProps> = ({
               alignItems: 'center',
               justifyContent: 'center',
               color: 'inherit',
-              transition: 'background 0.15s ease',
             }}
             title="Zoom Out"
+            aria-label="Zoom Out"
           >
             <Icon name="remove" size={18} />
           </button>
-        </div>
-      </div>
-
-      {/* Bottom Legend */}
-      <div
-        className="absolute z-500 hidden lg:flex flex-wrap items-center gap-4 px-3 py-2 text-xs"
-        style={{
-          ...mapBtnStyle,
-          bottom: '1.5rem',
-          left: dynamicLeftOffset,
-          borderRadius: 'var(--radius-sm)',
-          fontFamily: "'Google Sans Flex', 'Google Sans Text', sans-serif",
-        }}
-      >
-        <div className="flex items-center gap-1.5 font-bold" style={{ color: 'var(--color-accent)' }}>
-          <span>Zoom: {currentZoom}x</span>
-          <span className="text-[10px] font-normal" style={{ color: isDark ? '#5a6178' : '#8b90a0' }}>(Max: 26x)</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="w-3 h-1 bg-blue-400 rounded-full inline-block" />
-          <span>GPS Fix</span>
-        </div>
-        <div className="flex items-center gap-1.5 font-semibold" style={{ color: 'var(--color-violet)' }}>
-          <span className="w-3 h-1 rounded-full inline-block" style={{ background: 'var(--color-violet)' }} />
-          <Icon name="memory" size={12} />
-          <span>AI Trajectory</span>
-        </div>
-        <div className="hidden md:flex items-center gap-1" style={{ color: isDark ? '#5a6178' : '#8b90a0' }}>
-          <Icon name="touch_app" size={14} />
-          <span>Click to reposition</span>
         </div>
       </div>
     </div>

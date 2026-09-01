@@ -3,6 +3,7 @@ import { Icon } from './Icon';
 import { useTheme } from '../context/ThemeContext';
 
 interface HeaderProps {
+  pageTitle: string;
   onOpenArchitecture: () => void;
   onRequestPermissions: () => void;
   onLocateNow?: () => void;
@@ -13,6 +14,7 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
+  pageTitle,
   onOpenArchitecture,
   onRequestPermissions,
   onLocateNow,
@@ -25,66 +27,87 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header
-      className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 panel-section lg:px-5"
+      className="flex items-center justify-between gap-4 px-5 panel-section"
       style={{
-        background: 'var(--color-bg-secondary)',
+        height: 64,
+        paddingTop: 'env(safe-area-inset-top, 0px)',
+        background: 'var(--color-bg-primary)',
         borderBottom: '1px solid var(--color-border)',
-        backdropFilter: 'blur(12px)',
       }}
     >
-      {/* Left: Brand */}
-      <div className="flex items-center gap-3">
-        <div
-          className="w-9 h-9 rounded-xl flex items-center justify-center"
+      {/* Left: Brand + Page title */}
+      <div className="flex items-center gap-3 shrink-0">
+        <button
+          onClick={onOpenArchitecture}
+          className="flex items-center justify-center"
           style={{
+            width: 36,
+            height: 36,
+            borderRadius: 'var(--radius-md)',
             background: 'var(--color-accent-soft)',
+            border: 'none',
+            cursor: 'pointer',
+            color: 'var(--color-accent-text)',
+          }}
+          aria-label="AI Architecture"
+          title="AI Architecture & Benchmarks"
+        >
+          <Icon name="explore" size={20} filled />
+        </button>
+        <span
+          className="font-semibold tracking-tight whitespace-nowrap"
+          style={{
+            fontSize: '18px',
+            color: 'var(--color-text-primary)',
           }}
         >
-          <Icon name="explore" size={20} style={{ color: 'var(--color-accent)' }} filled />
-        </div>
-        <div>
-          <p
-            className="m-0 text-[10px] font-semibold uppercase tracking-[0.18em] hidden lg:block"
-            style={{ color: 'var(--color-text-tertiary)' }}
-          >
-            Navigation
-          </p>
-          <h1
-            className="text-base font-bold tracking-tight flex items-center gap-2 m-0"
-            style={{ color: 'var(--color-text-primary)' }}
-          >
-            <span>Ultra-GPS</span>
-            <span
-              className="badge hidden lg:inline-flex"
-              style={{
-                background: isAiLoaded ? 'var(--color-success-soft)' : 'var(--color-accent-soft)',
-                color: isAiLoaded ? 'var(--color-success-text)' : 'var(--color-accent-text)',
-                fontSize: '9px',
-              }}
-            >
-              <span
-                className="status-dot"
-                style={{
-                  background: isAiLoaded ? 'var(--color-success)' : 'var(--color-accent)',
-                }}
-              />
-              {isAiLoaded ? 'AI Ready' : 'Compiling...'}
-            </span>
-          </h1>
-          <p className="text-xs m-0 hidden lg:block" style={{ color: 'var(--color-text-tertiary)' }}>
-            6-DOF Sensor Fusion · ONNX Inertial MLP · Instantaneous Odometry
-          </p>
+          {pageTitle}
+        </span>
+      </div>
+
+      {/* Center: Search */}
+      <div className="flex-1 max-w-md hidden md:block">
+        <div
+          className="flex items-center h-10 px-3"
+          style={{
+            background: 'var(--color-bg-inset)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-full)',
+          }}
+        >
+          <Icon name="search" size={18} style={{ color: 'var(--color-text-tertiary)' }} />
+          <input
+            className="w-full bg-transparent border-none focus:outline-none text-sm px-2"
+            style={{
+              color: 'var(--color-text-primary)',
+              fontFamily: 'inherit',
+            }}
+            placeholder="Search destination…"
+            type="text"
+          />
         </div>
       </div>
 
       {/* Right: Actions */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 shrink-0">
+        {onLocateNow && (
+          <button
+            onClick={onLocateNow}
+            className="btn hidden lg:inline-flex"
+            style={{ padding: '6px 10px' }}
+            title="Acquire Current Device Location"
+          >
+            <Icon name="my_location" size={16} style={{ color: 'var(--color-accent-text)' }} />
+            <span>Locate</span>
+          </button>
+        )}
+
         {onToggleSidebar && (
           <button
             onClick={onToggleSidebar}
             className="btn hidden lg:inline-flex"
-            title={isSidebarOpen ? 'Hide Telemetry Panel' : 'Show Telemetry Panel'}
             style={{ padding: '6px 10px' }}
+            title={isSidebarOpen ? 'Hide Telemetry Panel' : 'Show Telemetry Panel'}
           >
             <Icon
               name={isSidebarOpen ? 'left_panel_close' : 'left_panel_open'}
@@ -94,12 +117,11 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         )}
 
-        {/* Theme Toggle */}
         <button
           onClick={toggleTheme}
           className="btn"
-          title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
           style={{ padding: '6px 10px' }}
+          title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
         >
           <Icon
             name={isDark ? 'light_mode' : 'dark_mode'}
@@ -109,31 +131,40 @@ export const Header: React.FC<HeaderProps> = ({
           />
         </button>
 
-        {onLocateNow && (
-          <button onClick={onLocateNow} className="btn btn-accent hidden lg:inline-flex" title="Acquire Current Device Location">
-            <Icon name="my_location" size={16} style={{ color: 'var(--color-accent-text)' }} />
-            <span>Locate</span>
-          </button>
-        )}
-
-        <button onClick={onOpenArchitecture} className="btn btn-accent hidden lg:inline-flex" title="AI Architecture & Benchmarks">
-          <Icon name="memory" size={16} style={{ color: 'var(--color-accent-text)' }} />
-          <span>Architecture</span>
-        </button>
-
         <button
           onClick={onRequestPermissions}
-          className={`btn ${hasPermissions ? 'btn-success' : 'btn-accent'} hidden lg:inline-flex`}
-          title="Request Sensor Permissions"
+          className="flex items-center justify-center"
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: 'var(--radius-full)',
+            background: 'var(--color-accent)',
+            border: 'none',
+            color: 'var(--color-text-inverse)',
+            cursor: 'pointer',
+          }}
+          title={hasPermissions ? 'Sensors Ready' : 'Init Sensors'}
         >
           <Icon
-            name={hasPermissions ? 'verified_user' : 'shield'}
-            size={16}
+            name={hasPermissions ? 'verified_user' : 'person'}
+            size={18}
             filled={hasPermissions}
-            style={{ color: hasPermissions ? 'var(--color-success-text)' : 'var(--color-accent-text)' }}
           />
-          <span>{hasPermissions ? 'Sensors Ready' : 'Init Sensors'}</span>
         </button>
+
+        {isAiLoaded && (
+          <span
+            className="badge"
+            style={{
+              background: 'var(--color-success-soft)',
+              color: 'var(--color-success-text)',
+              fontSize: '9px',
+            }}
+          >
+            <span className="status-dot" style={{ background: 'var(--color-success)' }} />
+            AI
+          </span>
+        )}
       </div>
     </header>
   );
