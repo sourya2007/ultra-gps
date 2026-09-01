@@ -8,9 +8,9 @@ interface MobileDockProps {
   onChangeTab: (tab: DockTab) => void;
 }
 
-const tabs: { key: DockTab; label: string; icon: string }[] = [
+const tabs: { key: DockTab; label: string; icon: string; hideOn?: 'lg' }[] = [
   { key: 'map', label: 'MAP', icon: 'map' },
-  { key: 'telemetry', label: 'TELEMETRY', icon: 'monitoring' },
+  { key: 'telemetry', label: 'TELEMETRY', icon: 'monitoring', hideOn: 'lg' },
   { key: 'analysis', label: 'ANALYSIS', icon: 'analytics' },
 ];
 
@@ -30,14 +30,15 @@ export const MobileDock: React.FC<MobileDockProps> = ({
       aria-label="Primary"
     >
       <div className="flex justify-around items-center h-16 px-4">
-        {tabs.map(({ key, label, icon }) => {
+        {tabs.map(({ key, label, icon, hideOn }) => {
           const isActive = activeTab === key;
+          const visibilityClass = hideOn === 'lg' ? 'lg:hidden' : '';
           return (
             <button
               key={key}
               type="button"
               onClick={() => onChangeTab(key)}
-              className="flex flex-col items-center gap-1 transition-colors"
+              className={`flex flex-col items-center gap-1 transition-colors ${visibilityClass}`}
               style={{
                 minWidth: 64,
                 color: isActive ? 'var(--color-accent-text)' : 'var(--color-text-tertiary)',

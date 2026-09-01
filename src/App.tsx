@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useLocationTracker } from './hooks/useLocationTracker';
 import { Header } from './components/Header';
 import { MapView } from './components/MapView';
@@ -9,6 +9,7 @@ import { SimulatorControls } from './components/SimulatorControls';
 import { AIArchitectureModal } from './components/AIArchitectureModal';
 import { MobileDock, type DockTab } from './components/MobileDock';
 import { CompassDial } from './components/CompassDial';
+import { DockAnalysisPanel } from './components/DockAnalysisPanel';
 import type { Coordinates, HeadingData, NavigationMetrics, SensorStatus, TrackingMode, PathPoint } from './types';
 import type { AIInferenceMetrics } from './types';
 
@@ -118,6 +119,37 @@ export const App: React.FC = () => {
   const [isArchitectureOpen, setIsArchitectureOpen] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<DockTab>('map');
 
+  // Responsive helper: are we on a desktop-class viewport (lg+, ≥1024px)?
+  // The "ANALYSIS" dock button opens a slide-up panel on desktop instead of
+  // navigating to a dedicated page (the panel is dock-attached with backdrop blur).
+  const [isDesktopViewport, setIsDesktopViewport] = useState<boolean>(false);
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const apply = () => setIsDesktopViewport(mq.matches);
+    apply();
+    if (mq.addEventListener) mq.addEventListener('change', apply);
+    else mq.addListener(apply);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener('change', apply);
+      else mq.removeListener(apply);
+    };
+  }, []);
+
+  // Derived: the slide-up analysis panel is open when the user has selected the
+  // ANALYSIS tab *and* we're on a desktop-class viewport.
+  const isAnalysisPanelOpen = activeTab === 'analysis' && isDesktopViewport;
+
+  // Handle dock tab changes — on desktop, ANALYSIS toggles the panel;
+  // on mobile/tablet it switches pages (page-mode is handled in the render below).
+  const handleDockTabChange = (tab: DockTab) => {
+    if (tab === 'analysis' && isDesktopViewport) {
+      setActiveTab((prev) => (prev === 'analysis' ? 'map' : 'analysis'));
+      return;
+    }
+    setActiveTab(tab);
+  };
+
   const mapProps: MapBlockProps = {
     location: state.currentLocation,
     heading: state.headingData.heading,
@@ -178,16 +210,26 @@ export const App: React.FC = () => {
                        lg:grid-cols-[minmax(0,1fr)_420px] lg:gap-5 lg:p-6
                        md:h-full md:overflow-hidden"
           >
+            {/* Left column: map only */}
             <div
-              className="h-[min(42vh,380px)] md:h-full md:min-h-0"
+              className="h-[min(42vh,380px)] flex-none md:flex-1 md:min-h-0 md:h-full"
             >
               <MapBlock {...mapProps} />
             </div>
 
+            {/* Right column: telemetry bento (top) + compass dial (below) */}
             <div
-              className="md:overflow-y-auto md:pr-1 md:min-h-0 scrollbar-hide"
+              className="md:overflow-y-auto md:pr-1 md:min-h-0 scrollbar-hide flex flex-col gap-3"
             >
               <TelemetryBlock {...telemetryProps} />
+              {/* Compass dial below the bento on desktop */}
+              <div className="hidden lg:block">
+                <CompassDial
+                  headingData={state.headingData}
+                  navigationMetrics={state.navigationMetrics}
+                  sensorStatus={sensorStatus}
+                />
+              </div>
             </div>
           </div>
         )}
@@ -200,33 +242,48 @@ export const App: React.FC = () => {
                        lg:grid-cols-[minmax(0,1fr)_420px] lg:gap-5 lg:p-6
                        md:h-full md:overflow-hidden"
           >
+            {/* Left column: map only on desktop, map+compass on tablet */}
             <div
-              className="flex flex-col gap-3 md:min-h-0 md:h-full md:overflow-y-auto scrollbar-hide"
+              className="flex flex-col gap-3 md:min-h-0 md:h-full md:overflow-y-auto scrollbar-hide
+                         lg:overflow-hidden"
             >
-              <div className="h-[min(34vh,320px)] md:flex-none">
+              <div
+                className="h-[min(34vh,320px)] md:flex-none lg:h-full lg:min-h-0"
+              >
                 <MapBlock {...mapProps} />
               </div>
-              <CompassDial
-                headingData={state.headingData}
-                navigationMetrics={state.navigationMetrics}
-                sensorStatus={sensorStatus}
-              />
+              {/* Compass only below the map on tablet (md); on desktop (lg) it moves to the right rail */}
+              <div className="lg:hidden">
+                <CompassDial
+                  headingData={state.headingData}
+                  navigationMetrics={state.navigationMetrics}
+                  sensorStatus={sensorStatus}
+                />
+              </div>
             </div>
 
+            {/* Right column: telemetry bento, plus compass below on desktop */}
             <div
-              className="md:overflow-y-auto md:pr-1 md:min-h-0 scrollbar-hide"
+              className="md:overflow-y-auto md:pr-1 md:min-h-0 scrollbar-hide flex flex-col gap-3"
             >
               <TelemetryBlock {...telemetryProps} />
+              {/* Compass below the bento on desktop */}
+              <div className="hidden lg:block">
+                <CompassDial
+                  headingData={state.headingData}
+                  navigationMetrics={state.navigationMetrics}
+                  sensorStatus={sensorStatus}
+                />
+              </div>
             </div>
           </div>
         )}
 
-        {/* ANALYSIS page */}
-        {activeTab === 'analysis' && (
+        {/* ANALYSIS page — only on mobile/tablet; desktop opens the dock panel instead */}
+        {activeTab === 'analysis' && !isDesktopViewport && (
           <div
             className="flex flex-col gap-3 p-4
                        md:grid md:grid-cols-[minmax(0,1fr)_380px] md:gap-4 md:p-5
-                       lg:grid-cols-[minmax(0,1fr)_420px] lg:gap-5 lg:p-6
                        md:h-full md:overflow-hidden"
           >
             <div
@@ -259,7 +316,26 @@ export const App: React.FC = () => {
       </main>
 
       {/* Bottom tab bar — visible on all sizes */}
-      <MobileDock activeTab={activeTab} onChangeTab={setActiveTab} />
+      <MobileDock activeTab={activeTab} onChangeTab={handleDockTabChange} />
+
+      {/* Desktop-only slide-up analysis panel attached to the dock */}
+      <DockAnalysisPanel
+        open={isAnalysisPanelOpen}
+        onClose={() => setActiveTab('map')}
+        recentMotion={state.recentMotion}
+        peakThreshold={0.25}
+        aiMetrics={aiMetrics}
+        navigationMetrics={state.navigationMetrics}
+        headingData={state.headingData}
+        sensorStatus={sensorStatus}
+        isSimulating={sensorStatus.isSimulating}
+        currentHeading={state.headingData.heading}
+        onOpenArchitecture={() => setIsArchitectureOpen(true)}
+        onInjectSample={injectSample}
+        onToggleSimulator={toggleMotionSimulator}
+        onSetHeading={setManualHeading}
+        onResetTracking={resetTracking}
+      />
 
       {/* AI Architecture Modal */}
       <AIArchitectureModal
