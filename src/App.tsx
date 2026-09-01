@@ -10,7 +10,16 @@ import { AIArchitectureModal } from './components/AIArchitectureModal';
 import { MobileDock, type DockTab } from './components/MobileDock';
 import { CompassDial } from './components/CompassDial';
 import { DockAnalysisPanel } from './components/DockAnalysisPanel';
-import type { Coordinates, HeadingData, NavigationMetrics, SensorStatus, TrackingMode, PathPoint } from './types';
+import { SettingsPanel } from './components/SettingsPanel';
+import type {
+  Coordinates,
+  HeadingData,
+  MapLayerType,
+  NavigationMetrics,
+  SensorStatus,
+  TrackingMode,
+  PathPoint,
+} from './types';
 import type { AIInferenceMetrics } from './types';
 
 const PAGE_TITLE: Record<DockTab, string> = {
@@ -31,6 +40,8 @@ interface MapBlockProps {
   hasReceivedFix: boolean;
   setManualLocation: (lat: number, lng: number) => void;
   acquireCurrentLocation: () => void;
+  activeLayer?: MapLayerType;
+  onChangeLayer?: (layer: MapLayerType) => void;
 }
 
 const MapBlock: React.FC<MapBlockProps> = ({
@@ -41,6 +52,8 @@ const MapBlock: React.FC<MapBlockProps> = ({
   hasReceivedFix,
   setManualLocation,
   acquireCurrentLocation,
+  activeLayer,
+  onChangeLayer,
 }) => (
   <div
     className="w-full h-full rounded-3xl md:rounded-2xl overflow-hidden"
@@ -60,6 +73,8 @@ const MapBlock: React.FC<MapBlockProps> = ({
       onSetLocation={setManualLocation}
       onLocateNow={acquireCurrentLocation}
       isSidebarOpen={false}
+      activeLayer={activeLayer}
+      onChangeLayer={onChangeLayer}
     />
   </div>
 );
@@ -117,7 +132,9 @@ export const App: React.FC = () => {
   } = useLocationTracker();
 
   const [isArchitectureOpen, setIsArchitectureOpen] = useState<boolean>(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<DockTab>('map');
+  const [mapLayer, setMapLayer] = useState<MapLayerType>('satellite');
 
   // Responsive helper: are we on a desktop-class viewport (lg+, ≥1024px)?
   // The "ANALYSIS" dock button opens a slide-up panel on desktop instead of
@@ -158,6 +175,8 @@ export const App: React.FC = () => {
     hasReceivedFix: state.hasReceivedFix,
     setManualLocation,
     acquireCurrentLocation,
+    activeLayer: mapLayer,
+    onChangeLayer: setMapLayer,
   };
 
   const telemetryProps: TelemetryProps = {
@@ -191,6 +210,7 @@ export const App: React.FC = () => {
         isAiLoaded={aiMetrics.isLoaded}
         isSidebarOpen={false}
         onToggleSidebar={undefined}
+        onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
       {/* Page content. paddingTop accounts for fixed header; paddingBottom for fixed bottom dock. */}
@@ -225,7 +245,10 @@ export const App: React.FC = () => {
               {/* Compass dial below the bento on desktop */}
               <div className="hidden lg:block">
                 <CompassDial
-                  headingData={state.headingData}
+                  fallbackHeading={state.headingData.heading}
+                  fallbackSource={state.headingData.source}
+                  pitch={state.headingData.pitch}
+                  calibrated={state.headingData.calibrated}
                   navigationMetrics={state.navigationMetrics}
                   sensorStatus={sensorStatus}
                 />
@@ -253,7 +276,10 @@ export const App: React.FC = () => {
               {/* Compass below the map on mobile only — on tablet the IMU panel takes the right rail instead */}
               <div className="md:hidden">
                 <CompassDial
-                  headingData={state.headingData}
+                  fallbackHeading={state.headingData.heading}
+                  fallbackSource={state.headingData.source}
+                  pitch={state.headingData.pitch}
+                  calibrated={state.headingData.calibrated}
                   navigationMetrics={state.navigationMetrics}
                   sensorStatus={sensorStatus}
                 />
@@ -271,7 +297,10 @@ export const App: React.FC = () => {
               {/* Compass on tablet (right rail, below IMU) — on mobile the compass is in the left column */}
               <div className="hidden md:block">
                 <CompassDial
-                  headingData={state.headingData}
+                  fallbackHeading={state.headingData.heading}
+                  fallbackSource={state.headingData.source}
+                  pitch={state.headingData.pitch}
+                  calibrated={state.headingData.calibrated}
                   navigationMetrics={state.navigationMetrics}
                   sensorStatus={sensorStatus}
                 />
@@ -334,6 +363,16 @@ export const App: React.FC = () => {
       <AIArchitectureModal
         isOpen={isArchitectureOpen}
         onClose={() => setIsArchitectureOpen(false)}
+      />
+
+      {/* System Settings Panel */}
+      <SettingsPanel
+        open={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        sensorStatus={sensorStatus}
+        headingData={state.headingData}
+        activeMapLayer={mapLayer}
+        onChangeMapLayer={setMapLayer}
       />
     </div>
   );

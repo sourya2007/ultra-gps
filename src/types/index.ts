@@ -1,5 +1,7 @@
 export type TrackingMode = 'GPS' | 'AI_TRANSFORMER' | 'SEARCHING_GPS';
 
+export type MapLayerType = 'satellite' | 'street' | 'dark';
+
 export interface Coordinates {
   latitude: number;
   longitude: number;

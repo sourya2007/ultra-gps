@@ -11,6 +11,7 @@ interface HeaderProps {
   isAiLoaded?: boolean;
   onToggleSidebar?: () => void;
   isSidebarOpen?: boolean;
+  onOpenSettings?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -22,6 +23,7 @@ export const Header: React.FC<HeaderProps> = ({
   isAiLoaded = false,
   onToggleSidebar,
   isSidebarOpen = true,
+  onOpenSettings,
 }) => {
   const { toggleTheme, isDark } = useTheme();
 
@@ -130,6 +132,22 @@ export const Header: React.FC<HeaderProps> = ({
             filled={isDark}
           />
         </button>
+
+        {onOpenSettings && (
+          <button
+            onClick={onOpenSettings}
+            className="btn"
+            style={{ padding: '6px 10px' }}
+            title="System Settings"
+            aria-label="System Settings"
+          >
+            <Icon
+              name="settings"
+              size={18}
+              style={{ color: 'var(--color-text-secondary)' }}
+            />
+          </button>
+        )}
 
         <button
           onClick={onRequestPermissions}

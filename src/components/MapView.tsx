@@ -1,10 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import type { Coordinates, PathPoint, TrackingMode } from '../types';
+import type { Coordinates, MapLayerType, PathPoint, TrackingMode } from '../types';
 import { Icon } from './Icon';
-
-export type MapLayerType = 'satellite' | 'street' | 'dark';
 
 interface MapViewProps {
   location: Coordinates;
@@ -15,6 +13,8 @@ interface MapViewProps {
   onSetLocation?: (lat: number, lng: number) => void;
   onLocateNow?: () => void;
   isSidebarOpen?: boolean;
+  activeLayer?: MapLayerType;
+  onChangeLayer?: (layer: MapLayerType) => void;
 }
 
 export const MapView: React.FC<MapViewProps> = ({
@@ -26,6 +26,8 @@ export const MapView: React.FC<MapViewProps> = ({
   onSetLocation,
   onLocateNow,
   isSidebarOpen = false,
+  activeLayer: controlledLayer,
+  onChangeLayer,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -38,8 +40,9 @@ export const MapView: React.FC<MapViewProps> = ({
   const initialCenteredRef = useRef<boolean>(false);
   const prevModeRef = useRef<TrackingMode>(mode);
 
-  const [activeLayer, setActiveLayer] = useState<MapLayerType>('satellite');
+  const [internalLayer, setInternalLayer] = useState<MapLayerType>('satellite');
   const [currentZoom, setCurrentZoom] = useState<number>(18);
+  const activeLayer = controlledLayer ?? internalLayer;
 
   const CARTO_API_KEY = 'cb1_2q2m_1_e92555c70605d55997b6b223';
 
@@ -134,7 +137,10 @@ export const MapView: React.FC<MapViewProps> = ({
     const map = mapInstanceRef.current;
     if (!map) return;
 
-    setActiveLayer(newLayer);
+    if (controlledLayer === undefined) {
+      setInternalLayer(newLayer);
+    }
+    onChangeLayer?.(newLayer);
 
     if (tileLayerRef.current) {
       map.removeLayer(tileLayerRef.current);
@@ -144,6 +150,17 @@ export const MapView: React.FC<MapViewProps> = ({
     const newTiles = L.tileLayer(config.url, config.options).addTo(map);
     tileLayerRef.current = newTiles;
   };
+
+  // Re-create tile layer whenever the active layer changes
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    if (tileLayerRef.current) {
+      map.removeLayer(tileLayerRef.current);
+    }
+    const config = getTileLayerConfig(activeLayer);
+    tileLayerRef.current = L.tileLayer(config.url, config.options).addTo(map);
+  }, [activeLayer]);
 
   // Direction Marker
   const createDirectionIcon = (currentMode: TrackingMode) => {
