@@ -234,26 +234,24 @@ export const App: React.FC = () => {
           </div>
         )}
 
-        {/* TELEMETRY page */}
+        {/* TELEMETRY page — mobile + tablet only (TELEMETRY dock tab is hidden on lg+).
+            Shows the map + compass dial + IMU signal analysis. Telemetry bento
+            (COORDS/SPEED/HEADING/DISTANCE) lives on the MAP page only. */}
         {activeTab === 'telemetry' && (
           <div
             className="flex flex-col gap-3 p-4
                        md:grid md:grid-cols-[minmax(0,1fr)_380px] md:gap-4 md:p-5
-                       lg:grid-cols-[minmax(0,1fr)_420px] lg:gap-5 lg:p-6
                        md:h-full md:overflow-hidden"
           >
-            {/* Left column: map only on desktop, map+compass on tablet */}
+            {/* Left column: map + compass on mobile; just the map on tablet */}
             <div
-              className="flex flex-col gap-3 md:min-h-0 md:h-full md:overflow-y-auto scrollbar-hide
-                         lg:overflow-hidden"
+              className="flex flex-col gap-3 md:min-h-0 md:h-full md:overflow-y-auto scrollbar-hide"
             >
-              <div
-                className="h-[min(34vh,320px)] md:flex-none lg:h-full lg:min-h-0"
-              >
+              <div className="h-[min(34vh,320px)] flex-none md:flex-none md:h-[min(34vh,360px)]">
                 <MapBlock {...mapProps} />
               </div>
-              {/* Compass only below the map on tablet (md); on desktop (lg) it moves to the right rail */}
-              <div className="lg:hidden">
+              {/* Compass below the map on mobile only — on tablet the IMU panel takes the right rail instead */}
+              <div className="md:hidden">
                 <CompassDial
                   headingData={state.headingData}
                   navigationMetrics={state.navigationMetrics}
@@ -262,13 +260,16 @@ export const App: React.FC = () => {
               </div>
             </div>
 
-            {/* Right column: telemetry bento, plus compass below on desktop */}
+            {/* Right column: IMU signal analysis on tablet; on mobile it sits below */}
             <div
               className="md:overflow-y-auto md:pr-1 md:min-h-0 scrollbar-hide flex flex-col gap-3"
             >
-              <TelemetryBlock {...telemetryProps} />
-              {/* Compass below the bento on desktop */}
-              <div className="hidden lg:block">
+              <SensorWaveform
+                recentMotion={state.recentMotion}
+                peakThreshold={0.25}
+              />
+              {/* Compass on tablet (right rail, below IMU) — on mobile the compass is in the left column */}
+              <div className="hidden md:block">
                 <CompassDial
                   headingData={state.headingData}
                   navigationMetrics={state.navigationMetrics}
@@ -279,22 +280,14 @@ export const App: React.FC = () => {
           </div>
         )}
 
-        {/* ANALYSIS page — only on mobile/tablet; desktop opens the dock panel instead */}
+        {/* ANALYSIS page — only on mobile/tablet; desktop opens the dock panel instead.
+            IMU signal analysis lives on the TELEMETRY view, so this page just
+            shows the AI model status + simulator controls. */}
         {activeTab === 'analysis' && !isDesktopViewport && (
           <div
             className="flex flex-col gap-3 p-4
-                       md:grid md:grid-cols-[minmax(0,1fr)_380px] md:gap-4 md:p-5
                        md:h-full md:overflow-hidden"
           >
-            <div
-              className="md:overflow-y-auto md:pr-1 md:min-h-0 scrollbar-hide"
-            >
-              <SensorWaveform
-                recentMotion={state.recentMotion}
-                peakThreshold={0.25}
-              />
-            </div>
-
             <div
               className="flex flex-col gap-3 md:overflow-y-auto md:pr-1 md:min-h-0 scrollbar-hide"
             >
