@@ -147,7 +147,7 @@ export const RoutePlanning: React.FC = () => {
 
       {/* Transport mode chips */}
       <div className="flex gap-2">
-        {MODES.map(({ key, label, icon, duration }) => {
+        {MODES.map(({ key, icon, duration }) => {
           const active = key === mode;
           return (
             <button
