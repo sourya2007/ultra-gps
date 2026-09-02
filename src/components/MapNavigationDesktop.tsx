@@ -161,7 +161,7 @@ export const MapNavigationDesktop: React.FC<MapNavigationDesktopProps> = (props)
           style={{
             top: 24,
             right: 24,
-            zIndex: 10,
+            zIndex: 500,
             display: 'flex',
             gap: 6,
             padding: 4,
