@@ -39,6 +39,8 @@ export const MapView: React.FC<MapViewProps> = ({
   const autoFollowRef = useRef<boolean>(true);
   const initialCenteredRef = useRef<boolean>(false);
   const prevModeRef = useRef<TrackingMode>(mode);
+  const prevHeadingRef = useRef<number>(heading);
+  const continuousHeadingRef = useRef<number>(heading);
 
   const [internalLayer, setInternalLayer] = useState<MapLayerType>('satellite');
   const [currentZoom, setCurrentZoom] = useState<number>(18);
@@ -233,9 +235,16 @@ export const MapView: React.FC<MapViewProps> = ({
     }
 
     const rotators = document.querySelectorAll('.location-heading-rotator');
-    rotators.forEach((el) => {
-      (el as HTMLElement).style.transform = `rotate(${heading}deg)`;
-    });
+    if (rotators.length > 0) {
+      let delta = heading - prevHeadingRef.current;
+      while (delta > 180) delta -= 360;
+      while (delta < -180) delta += 360;
+      continuousHeadingRef.current += delta;
+      prevHeadingRef.current = heading;
+      rotators.forEach((el) => {
+        (el as HTMLElement).style.transform = `rotate(${continuousHeadingRef.current}deg)`;
+      });
+    }
 
     const isAi = mode === 'AI_TRANSFORMER';
     const accuracy = location.accuracy ?? (isAi ? 6 : 10);
