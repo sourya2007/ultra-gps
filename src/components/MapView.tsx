@@ -365,7 +365,10 @@ export const MapView: React.FC<MapViewProps> = ({
           : 'SEARCHING_GPS TRACKING'}
       </div>
 
-      {/* Map Style Switcher — top-left, pill segmented control */}
+      {/* Map Style Switcher — top-left, pill segmented control.
+          Hidden when a parent component (desktop/tablet shell) provides
+          its own layer switcher via activeLayer/onChangeLayer. */}
+      {controlledLayer === undefined && (
       <div
         className="absolute z-[500] flex items-center gap-1 p-1"
         style={{
@@ -401,6 +404,7 @@ export const MapView: React.FC<MapViewProps> = ({
           </button>
         ))}
       </div>
+      )}
 
       {/* Right Controls — circular, matching reference */}
       <div className="absolute bottom-20 lg:bottom-6 right-4 z-[500] flex flex-col gap-2">

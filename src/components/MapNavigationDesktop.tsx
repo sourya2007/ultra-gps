@@ -27,9 +27,6 @@ interface MapNavigationDesktopProps {
   onChangeLayer?: (layer: MapLayerType) => void;
 }
 
-const MAP_BG =
-  'https://lh3.googleusercontent.com/aida-public/AB6AXuDHav_k8wCuEjmFBH5lHb0njYK0hbEBaA1pYA4aDQD5DV3XSCHXFKqnKE4-GJK6MkIntykrlZ5BFF3pphO44GJavgon7dYFFhg2s0oumQ2gGhBaQCAUvDYhIf2W2ULK1qRBtFuBOZlqjJ79O7SRUdE95INkhVjXulgUyKkNF0ezqdx2Oi2MWVlUk0tiii_xv_q21thX2F8AGp6h28NjeNMIkc6WHMHyY3is-2Rii_bIhdOlt83_8dxO';
-
 function formatCountdown(seconds: number): string {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
@@ -37,11 +34,11 @@ function formatCountdown(seconds: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-function formatDuration(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+function cardinalFromHeading(h: number): string {
+  const norm = ((h % 360) + 360) % 360;
+  const labels = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+  const idx = Math.round(norm / 45) % 8;
+  return labels[idx];
 }
 
 export const MapNavigationDesktop: React.FC<MapNavigationDesktopProps> = (props) => {
@@ -62,6 +59,12 @@ export const MapNavigationDesktop: React.FC<MapNavigationDesktopProps> = (props)
     onChangeLayer,
   } = props;
 
+  // Track whether the user has selected an active route. When false, the
+  // overview card shows the current location + ETA only (no REM).
+  const [activeRouteName, setActiveRouteName] = useState<string>('');
+
+  const isRouteActive = activeRouteName.trim().length > 0;
+
   // Synthetic flight metrics (mocked for the demo)
   const [tick, setTick] = useState(0);
   useEffect(() => {
@@ -77,27 +80,6 @@ export const MapNavigationDesktop: React.FC<MapNavigationDesktopProps> = (props)
   const lngHemi = location.longitude >= 0 ? 'E' : 'W';
   const altitudeFt = location.altitude ? Math.round(location.altitude * 3.281).toLocaleString() : '4,280';
   const eta = formatCountdown(60 * 60 * 14 + 60 * 22);
-  const remaining = formatDuration(60 * 60 * 2 + 60 * 15 + 30);
-
-  // Sensor array progress values
-  const [gnssPct, setGnssPct] = useState(98);
-  const [driftPct, setDriftPct] = useState(42);
-  const [altPct, setAltPct] = useState(12);
-  useEffect(() => {
-    const t = setInterval(() => {
-      setGnssPct((v) => Math.max(95, Math.min(99, v + (Math.random() - 0.5) * 2)));
-      setDriftPct((v) => Math.max(35, Math.min(50, v + (Math.random() - 0.5) * 4)));
-      setAltPct((v) => Math.max(8, Math.min(20, v + (Math.random() - 0.5) * 3)));
-    }, 1500);
-    return () => clearInterval(t);
-  }, []);
-
-  // Subtle compass needle drift for the heading dial in the left panel
-  const needleRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (!needleRef.current) return;
-    needleRef.current.style.transform = `rotate(${headingDialDeg}deg)`;
-  }, [headingDialDeg]);
 
   // Animated data ticker
   const tickerRef = useRef<HTMLDivElement | null>(null);
@@ -119,44 +101,123 @@ export const MapNavigationDesktop: React.FC<MapNavigationDesktopProps> = (props)
         overflow: 'hidden',
       }}
     >
-      {/* Map background image — visible behind the transparent map tile, gives a futuristic backdrop */}
+      {/* Full-bleed Leaflet map background — fills the entire viewport
+          behind the floating left/right widgets. */}
       <div
         className="absolute inset-0 z-0"
-        style={{
-          backgroundImage: `url('${MAP_BG}')`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-        }}
-        aria-hidden
-      />
-      {/* Dim overlays */}
+        style={{ minHeight: 0 }}
+      >
+        <MapView
+          location={location}
+          heading={heading}
+          mode={mode}
+          path={path}
+          hasReceivedFix={hasReceivedFix}
+          onSetLocation={setManualLocation}
+          onLocateNow={acquireCurrentLocation}
+          isSidebarOpen={false}
+          activeLayer={activeLayer}
+          onChangeLayer={onChangeLayer}
+        />
+      </div>
+      {/* Reticle overlay sits on top of the map */}
       <div
-        className="absolute inset-0 pointer-events-none z-0"
+        className="absolute pointer-events-none"
         style={{
-          background: 'linear-gradient(to top, var(--color-bg-primary) 0%, transparent 30%, transparent 70%, var(--color-bg-primary) 100%)',
-          opacity: 0.85,
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: 64,
+          height: 64,
+          opacity: 0.5,
+          zIndex: 5,
         }}
-        aria-hidden
-      />
-      <div
-        className="absolute inset-y-0 left-0 pointer-events-none z-0"
-        style={{
-          width: '40%',
-          background: 'linear-gradient(to right, var(--color-bg-primary) 0%, transparent 100%)',
-          opacity: 0.75,
-        }}
-        aria-hidden
-      />
+      >
+        <div style={{ position: 'absolute', left: 0, top: '50%', width: 16, height: 1, background: 'rgba(195,243,139,0.7)' }} />
+        <div style={{ position: 'absolute', right: 0, top: '50%', width: 16, height: 1, background: 'rgba(195,243,139,0.7)' }} />
+        <div style={{ position: 'absolute', top: 0, left: '50%', width: 1, height: 16, background: 'rgba(195,243,139,0.7)' }} />
+        <div style={{ position: 'absolute', bottom: 0, left: '50%', width: 1, height: 16, background: 'rgba(195,243,139,0.7)' }} />
+        <div style={{ position: 'absolute', inset: 0, borderRadius: 9999, border: '1px solid rgba(195,243,139,0.30)' }} />
+        <div style={{ position: 'absolute', inset: 4, borderRadius: 9999, border: '1px dashed rgba(195,243,139,0.10)' }} />
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            width: 4,
+            height: 4,
+            borderRadius: 9999,
+            background: 'var(--color-accent)',
+            transform: 'translate(-50%, -50%)',
+            boxShadow: '0 0 8px var(--color-accent)',
+          }}
+        />
+      </div>
 
-      {/* Layout: left telemetry stack | center map | right coords panel */}
+      {/* Map layer select (top-right of map) */}
+      {onChangeLayer && (
+        <div
+          className="absolute"
+          style={{
+            top: 24,
+            right: 24,
+            zIndex: 10,
+            display: 'flex',
+            gap: 6,
+            padding: 4,
+            borderRadius: 12,
+            background: 'var(--color-bg-elevated)',
+            border: '1px solid var(--color-border)',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.30)',
+            pointerEvents: 'auto',
+          }}
+        >
+          {([
+            { key: 'street', label: 'Street', icon: 'map' },
+            { key: 'satellite', label: 'Satellite', icon: 'satellite' },
+            { key: 'dark', label: 'Dark', icon: 'dark_mode' },
+          ] as const).map(({ key, label, icon }) => {
+            const isActive = activeLayer === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => onChangeLayer(key)}
+                className="flex items-center"
+                style={{
+                  gap: 6,
+                  padding: '8px 12px',
+                  borderRadius: 8,
+                  background: isActive ? 'var(--color-accent-soft)' : 'transparent',
+                  color: isActive ? 'var(--color-accent-text)' : 'var(--color-text-primary)',
+                  border: isActive
+                    ? '1px solid var(--color-accent)'
+                    : '1px solid transparent',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: '0.10em',
+                  textTransform: 'uppercase',
+                  cursor: 'pointer',
+                }}
+                title={`${label} Layer`}
+              >
+                <Icon name={icon} size={14} filled={isActive} />
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Floating widgets layer — left/center/right panels sit on top of the map. */}
       <div
-        className="relative z-10 flex w-full h-full"
+        className="relative z-10 flex w-full h-full pointer-events-none"
         style={{ padding: 24, gap: 12 }}
       >
         {/* LEFT: Telemetry & Navigation Stack */}
         <div
           className="flex flex-col"
-          style={{ width: 380, gap: 12, height: '100%' }}
+          style={{ width: 380, gap: 12, height: '100%', pointerEvents: 'auto' }}
         >
           {/* Route Overview Card */}
           <div
@@ -195,24 +256,30 @@ export const MapNavigationDesktop: React.FC<MapNavigationDesktopProps> = (props)
                   color: 'var(--color-text-tertiary)',
                 }}
               >
-                <Icon name="explore" size={16} style={{ color: 'var(--color-accent-text)' }} />
-                Active Route
+                <Icon
+                  name={isRouteActive ? 'explore' : 'my_location'}
+                  size={16}
+                  style={{ color: 'var(--color-accent-text)' }}
+                />
+                {isRouteActive ? 'Active Route' : 'Current Position'}
               </span>
-              <span
-                style={{
-                  padding: '2px 8px',
-                  borderRadius: 6,
-                  background: 'rgba(195,243,139,0.18)',
-                  color: 'var(--color-accent-text)',
-                  fontSize: 10,
-                  fontFamily: "'Google Sans Mono',monospace",
-                  letterSpacing: '0.08em',
-                  textTransform: 'uppercase',
-                  fontWeight: 700,
-                }}
-              >
-                Lock: Sat-12
-              </span>
+              {isRouteActive && (
+                <span
+                  style={{
+                    padding: '2px 8px',
+                    borderRadius: 6,
+                    background: 'rgba(195,243,139,0.18)',
+                    color: 'var(--color-accent-text)',
+                    fontSize: 10,
+                    fontFamily: "'Google Sans Mono',monospace",
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase',
+                    fontWeight: 700,
+                  }}
+                >
+                  Lock: Sat-12
+                </span>
+              )}
             </div>
             <div className="flex flex-col" style={{ gap: 4 }}>
               <h2
@@ -226,7 +293,7 @@ export const MapNavigationDesktop: React.FC<MapNavigationDesktopProps> = (props)
                   color: 'var(--color-text-primary)',
                 }}
               >
-                Echo Base Delta
+                {isRouteActive ? activeRouteName : 'Current Location'}
               </h2>
               <p
                 className="flex items-center gap-2"
@@ -236,8 +303,13 @@ export const MapNavigationDesktop: React.FC<MapNavigationDesktopProps> = (props)
                   color: 'var(--color-text-tertiary)',
                 }}
               >
-                <Icon name="distance" size={14} />
-                {distNm} NM to target
+                <Icon
+                  name={isRouteActive ? 'distance' : 'satellite_alt'}
+                  size={14}
+                />
+                {isRouteActive
+                  ? `${distNm} NM to target`
+                  : `${latStr}° ${latHemi}, ${lngStr}° ${lngHemi}`}
               </p>
             </div>
             <div className="flex" style={{ gap: 16, marginTop: 8 }}>
@@ -253,7 +325,7 @@ export const MapNavigationDesktop: React.FC<MapNavigationDesktopProps> = (props)
                   className="uppercase"
                   style={{ fontSize: 9, color: 'var(--color-text-tertiary)', letterSpacing: '0.10em', fontWeight: 700 }}
                 >
-                  ETA
+                  {isRouteActive ? 'ETA' : 'Local Time'}
                 </span>
                 <span
                   style={{
@@ -265,37 +337,113 @@ export const MapNavigationDesktop: React.FC<MapNavigationDesktopProps> = (props)
                     fontVariantNumeric: 'tabular-nums',
                   }}
                 >
-                  {eta}
+                  {isRouteActive ? eta : '14:22:00'}
                 </span>
               </div>
-              <div
-                className="flex-1 flex flex-col"
-                style={{
-                  padding: 12,
-                  borderRadius: 8,
-                  background: 'var(--color-bg-inset)',
-                }}
-              >
-                <span
-                  className="uppercase"
-                  style={{ fontSize: 9, color: 'var(--color-text-tertiary)', letterSpacing: '0.10em', fontWeight: 700 }}
-                >
-                  REM
-                </span>
-                <span
+              {isRouteActive && (
+                <div
+                  className="flex-1 flex flex-col"
                   style={{
-                    fontFamily: "'Google Sans Mono',monospace",
-                    fontSize: 22,
-                    lineHeight: '28px',
-                    fontWeight: 500,
-                    color: 'var(--color-accent-text)',
-                    fontVariantNumeric: 'tabular-nums',
+                    padding: 12,
+                    borderRadius: 8,
+                    background: 'var(--color-bg-inset)',
                   }}
                 >
-                  {remaining}
-                </span>
-              </div>
+                  <span
+                    className="uppercase"
+                    style={{ fontSize: 9, color: 'var(--color-text-tertiary)', letterSpacing: '0.10em', fontWeight: 700 }}
+                  >
+                    Distance
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: "'Google Sans Mono',monospace",
+                      fontSize: 22,
+                      lineHeight: '28px',
+                      fontWeight: 500,
+                      color: 'var(--color-accent-text)',
+                      fontVariantNumeric: 'tabular-nums',
+                    }}
+                  >
+                    {distNm} NM
+                  </span>
+                </div>
+              )}
             </div>
+            {!isRouteActive && (
+              <div
+                className="flex"
+                style={{ gap: 8, marginTop: 4 }}
+              >
+                <input
+                  type="text"
+                  placeholder="Enter destination to start a route..."
+                  value={activeRouteName}
+                  onChange={(e) => setActiveRouteName(e.target.value)}
+                  className="flex-1"
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: 8,
+                    background: 'var(--color-bg-inset)',
+                    border: '1px solid var(--color-border)',
+                    color: 'var(--color-text-primary)',
+                    fontSize: 13,
+                    fontFamily: "'Google Sans Mono',monospace",
+                    outline: 'none',
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (activeRouteName.trim().length > 0) {
+                      // User already typed a name → no-op (typing is the action)
+                    } else {
+                      setActiveRouteName('Echo Base Delta');
+                    }
+                  }}
+                  className="flex items-center"
+                  style={{
+                    padding: '10px 16px',
+                    borderRadius: 8,
+                    background: 'var(--color-accent)',
+                    color: 'var(--color-text-inverse)',
+                    border: 'none',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    letterSpacing: '0.10em',
+                    textTransform: 'uppercase',
+                    cursor: 'pointer',
+                    gap: 6,
+                  }}
+                >
+                  <Icon name="navigation" size={16} filled />
+                  Start
+                </button>
+              </div>
+            )}
+            {isRouteActive && (
+              <button
+                type="button"
+                onClick={() => setActiveRouteName('')}
+                className="flex items-center justify-center"
+                style={{
+                  padding: '8px 0',
+                  borderRadius: 8,
+                  background: 'transparent',
+                  border: '1px solid var(--color-border)',
+                  color: 'var(--color-text-primary)',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: '0.10em',
+                  textTransform: 'uppercase',
+                  cursor: 'pointer',
+                  gap: 6,
+                }}
+              >
+                <Icon name="close" size={14} />
+                End Route
+              </button>
+            )}
           </div>
 
           {/* Speed + Heading Bento */}
@@ -396,47 +544,61 @@ export const MapNavigationDesktop: React.FC<MapNavigationDesktopProps> = (props)
                   width="100%"
                   height="100%"
                   className="absolute inset-0"
-                  style={{ transform: 'rotate(-90deg)' }}
                 >
-                  <circle cx="50" cy="50" r="45" fill="none" stroke="var(--color-border)" strokeWidth="2" />
+                  {/* Background ring */}
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="45"
+                    fill="none"
+                    stroke="var(--color-border)"
+                    strokeWidth="3"
+                  />
+                  {/* Green fill arc — fills clockwise from North (top, 0°)
+                      based on the current heading. circumference = 2*pi*45 = 282.74. */}
                   <circle
                     cx="50"
                     cy="50"
                     r="45"
                     fill="none"
                     stroke="var(--color-accent)"
-                    strokeWidth="4"
-                    strokeDasharray="283"
-                    strokeDashoffset="200"
-                    strokeOpacity="0.4"
-                  />
-                  <line x1="50" y1="5" x2="50" y2="12" stroke="var(--color-text-tertiary)" strokeWidth="2" />
-                  <line x1="50" y1="88" x2="50" y2="95" stroke="var(--color-text-tertiary)" strokeWidth="2" />
-                  <line x1="5" y1="50" x2="12" y2="50" stroke="var(--color-text-tertiary)" strokeWidth="2" />
-                  <line x1="88" y1="50" x2="95" y2="50" stroke="var(--color-text-tertiary)" strokeWidth="2" />
-                </svg>
-                <div
-                  ref={needleRef}
-                  className="absolute inset-0 flex items-center justify-center"
-                  style={{
-                    transition: 'transform 1s cubic-bezier(0.2,0.8,0.4,1)',
-                    transform: 'rotate(45deg)',
-                  }}
-                >
-                  <div
+                    strokeWidth="6"
+                    strokeLinecap="round"
+                    strokeDasharray={`${(headingDialDeg / 360) * 282.74} 282.74`}
+                    transform="rotate(-90 50 50)"
                     style={{
-                      position: 'absolute',
-                      top: '10%',
-                      left: '50%',
-                      width: 2,
-                      height: '40%',
-                      transform: 'translateX(-50%)',
-                      background: 'var(--color-accent)',
-                      borderRadius: 9999,
-                      boxShadow: '0 0 8px rgba(195,243,139,0.8)',
+                      filter: 'drop-shadow(0 0 6px rgba(195,243,139,0.7))',
+                      transition: 'stroke-dasharray 0.5s ease-out',
                     }}
                   />
-                </div>
+                  {/* Cardinal tick marks */}
+                  <line x1="50" y1="5" x2="50" y2="14" stroke="var(--color-text-tertiary)" strokeWidth="2" />
+                  <line x1="50" y1="86" x2="50" y2="95" stroke="var(--color-text-tertiary)" strokeWidth="2" />
+                  <line x1="5" y1="50" x2="14" y2="50" stroke="var(--color-text-tertiary)" strokeWidth="2" />
+                  <line x1="86" y1="50" x2="95" y2="50" stroke="var(--color-text-tertiary)" strokeWidth="2" />
+                  {/* North marker (slightly thicker red tick) */}
+                  <line
+                    x1="50"
+                    y1="5"
+                    x2="50"
+                    y2="18"
+                    stroke="var(--color-error)"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                  />
+                  <text
+                    x="50"
+                    y="3"
+                    textAnchor="middle"
+                    fontSize="8"
+                    fontWeight="700"
+                    fill="var(--color-error)"
+                    fontFamily="'Google Sans Mono',monospace"
+                  >
+                    N
+                  </text>
+                </svg>
+                {/* Center readout — accurate degree synced to on-device compass */}
                 <div
                   className="absolute flex flex-col items-center justify-center"
                   style={{
@@ -449,11 +611,12 @@ export const MapNavigationDesktop: React.FC<MapNavigationDesktopProps> = (props)
                   <span
                     style={{
                       fontFamily: "'Google Sans Flex','Inter',sans-serif",
-                      fontSize: 22,
+                      fontSize: 26,
                       lineHeight: 1,
                       fontWeight: 700,
                       color: 'var(--color-text-primary)',
                       letterSpacing: '-0.02em',
+                      fontVariantNumeric: 'tabular-nums',
                     }}
                   >
                     {String(headingDialDeg).padStart(3, '0')}
@@ -461,7 +624,7 @@ export const MapNavigationDesktop: React.FC<MapNavigationDesktopProps> = (props)
                   <span
                     className="uppercase"
                     style={{
-                      fontSize: 10,
+                      fontSize: 9,
                       fontFamily: "'Google Sans Mono',monospace",
                       color: 'var(--color-accent-text)',
                       letterSpacing: '0.10em',
@@ -469,35 +632,10 @@ export const MapNavigationDesktop: React.FC<MapNavigationDesktopProps> = (props)
                       marginTop: 2,
                     }}
                   >
-                    DEG
+                    DEG · {cardinalFromHeading(headingDialDeg)}
                   </span>
                 </div>
               </div>
-            </div>
-          </div>
-
-          {/* Sensor Array Status bars */}
-          <div
-            className="flex flex-col"
-            style={{
-              padding: 20,
-              gap: 12,
-              borderRadius: 16,
-              background: 'var(--color-bg-elevated)',
-              border: '1px solid var(--color-border)',
-              boxShadow: '0 8px 28px rgba(0,0,0,0.20)',
-            }}
-          >
-            <span
-              className="uppercase"
-              style={{ fontSize: 11, letterSpacing: '0.10em', fontWeight: 700, color: 'var(--color-text-tertiary)' }}
-            >
-              Sensor Array Status
-            </span>
-            <div className="flex flex-col" style={{ gap: 12 }}>
-              <ProgressBar label="GNSS Quality" value={gnssPct} tone="accent" />
-              <ProgressBar label="IMU Drift Comp" value={driftPct} tone="secondary" />
-              <ProgressBar label="Alt. Variance" value={altPct} tone="muted" />
             </div>
           </div>
 
@@ -562,67 +700,13 @@ export const MapNavigationDesktop: React.FC<MapNavigationDesktopProps> = (props)
           </div>
         </div>
 
-        {/* CENTER: Map + reticle */}
-        <div
-          className="relative flex-1"
-          style={{
-            borderRadius: 16,
-            overflow: 'hidden',
-            border: '1px solid var(--color-border)',
-            background: 'var(--color-canvas-bg)',
-          }}
-        >
-          {/* Real Leaflet map filling the center column */}
-          <MapView
-            location={location}
-            heading={heading}
-            mode={mode}
-            path={path}
-            hasReceivedFix={hasReceivedFix}
-            onSetLocation={setManualLocation}
-            onLocateNow={acquireCurrentLocation}
-            isSidebarOpen={false}
-            activeLayer={activeLayer}
-            onChangeLayer={onChangeLayer}
-          />
-          {/* Reticle */}
-          <div
-            className="absolute pointer-events-none"
-            style={{
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              width: 64,
-              height: 64,
-              opacity: 0.5,
-            }}
-          >
-            <div style={{ position: 'absolute', left: 0, top: '50%', width: 16, height: 1, background: 'rgba(195,243,139,0.7)' }} />
-            <div style={{ position: 'absolute', right: 0, top: '50%', width: 16, height: 1, background: 'rgba(195,243,139,0.7)' }} />
-            <div style={{ position: 'absolute', top: 0, left: '50%', width: 1, height: 16, background: 'rgba(195,243,139,0.7)' }} />
-            <div style={{ position: 'absolute', bottom: 0, left: '50%', width: 1, height: 16, background: 'rgba(195,243,139,0.7)' }} />
-            <div style={{ position: 'absolute', inset: 0, borderRadius: 9999, border: '1px solid rgba(195,243,139,0.30)' }} />
-            <div style={{ position: 'absolute', inset: 4, borderRadius: 9999, border: '1px dashed rgba(195,243,139,0.10)' }} />
-            <div
-              style={{
-                position: 'absolute',
-                top: '50%',
-                left: '50%',
-                width: 4,
-                height: 4,
-                borderRadius: 9999,
-                background: 'var(--color-accent)',
-                transform: 'translate(-50%, -50%)',
-                boxShadow: '0 0 8px var(--color-accent)',
-              }}
-            />
-          </div>
-        </div>
+        {/* CENTER: empty spacer — map is now full-bleed behind everything */}
+        <div className="flex-1" style={{ pointerEvents: 'none' }} />
 
         {/* RIGHT: Live Telemetry coordinates panel */}
         <div
           className="flex flex-col justify-end"
-          style={{ width: 320, gap: 12 }}
+          style={{ width: 320, gap: 12, pointerEvents: 'auto' }}
         >
           <div
             className="relative overflow-hidden"
@@ -761,50 +845,3 @@ const CoordRow: React.FC<{ label: string; value: string; suffix: string; tone: '
     </div>
   </div>
 );
-
-const ProgressBar: React.FC<{ label: string; value: number; tone: 'accent' | 'secondary' | 'muted' }> = ({
-  label,
-  value,
-  tone,
-}) => {
-  const color =
-    tone === 'accent'
-      ? 'var(--color-accent)'
-      : tone === 'secondary'
-      ? '#a4c9ff'
-      : 'var(--color-text-tertiary)';
-  return (
-    <div className="flex flex-col" style={{ gap: 4 }}>
-      <div className="flex justify-between items-end">
-        <span style={{ fontSize: 11, color: 'var(--color-text-primary)', fontFamily: "'Google Sans Mono',monospace" }}>
-          {label}
-        </span>
-        <span
-          style={{
-            fontSize: 12,
-            color,
-            fontFamily: "'Google Sans Mono',monospace",
-            fontWeight: 500,
-          }}
-        >
-          {Math.round(value)}%
-        </span>
-      </div>
-      <div
-        className="w-full overflow-hidden"
-        style={{ height: 6, borderRadius: 9999, background: 'var(--color-bg-inset)' }}
-      >
-        <div
-          style={{
-            width: `${value}%`,
-            height: '100%',
-            borderRadius: 9999,
-            background: color,
-            boxShadow: tone === 'accent' ? '0 0 10px rgba(195,243,139,0.5)' : 'none',
-            transition: 'width 0.4s ease',
-          }}
-        />
-      </div>
-    </div>
-  );
-};
