@@ -34,7 +34,7 @@ const MAP_BG =
 
 export const RoutePlanningDesktop: React.FC<RoutePlanningDesktopProps> = (props) => {
   const { location, heading, mode, path, hasReceivedFix, setManualLocation, acquireCurrentLocation, activeLayer, onChangeLayer } = props;
-  const [from, setFrom] = useState('Current Location');
+  const [from] = useState('Current Location');
   const [to, setTo] = useState('47.6205° N, 122.3493° W');
   const [modeSel, setModeSel] = useState<TransportMode>('car');
   const [waypoints, setWaypoints] = useState<string[]>([]);

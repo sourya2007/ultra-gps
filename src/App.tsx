@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useLocationTracker } from './hooks/useLocationTracker';
 import { Header } from './components/Header';
 import { MapView } from './components/MapView';
@@ -14,6 +14,17 @@ import { SettingsPanel } from './components/SettingsPanel';
 import { RoutePlanning } from './components/RoutePlanning';
 import { FusionHealth } from './components/FusionHealth';
 import { AILab } from './components/AILab';
+import { useBreakpoint } from './hooks/useBreakpoint';
+import { DesktopShell } from './components/DesktopShell';
+import { Icon } from './components/Icon';
+import { MapNavigationDesktop } from './components/MapNavigationDesktop';
+import { TelemetryAnalysisDesktop } from './components/TelemetryAnalysisDesktop';
+import { SignalAnalysisDesktop } from './components/SignalAnalysisDesktop';
+import { RoutePlanningDesktop } from './components/RoutePlanningDesktop';
+import { FusionHealthDesktop } from './components/FusionHealthDesktop';
+import { AILabDesktop } from './components/AILabDesktop';
+import { SettingsDesktop } from './components/SettingsDesktop';
+import { useTheme } from './context/ThemeContext';
 import type {
   Coordinates,
   HeadingData,
@@ -25,13 +36,34 @@ import type {
 } from './types';
 import type { AIInferenceMetrics } from './types';
 
+// Map the dock tab (mobile) to the sidebar key (desktop).
+type SidebarKey = 'map' | 'route' | 'telemetry' | 'analysis' | 'fusion' | 'ai-lab' | 'settings';
+
+const DOCK_TO_SIDEBAR: Record<DockTab, SidebarKey> = {
+  map: 'map',
+  route: 'route',
+  data: 'telemetry', // mobile "data" tab = desktop "telemetry"
+  fusion: 'fusion',
+  'ai-lab': 'ai-lab',
+  stats: 'analysis', // mobile "stats" tab = desktop "analysis"
+};
+const SIDEBAR_TO_DOCK: Record<SidebarKey, DockTab> = {
+  map: 'map',
+  route: 'route',
+  telemetry: 'data',
+  analysis: 'stats',
+  fusion: 'fusion',
+  'ai-lab': 'ai-lab',
+  settings: 'map', // settings opens a panel (not a dock tab) on mobile
+};
+
 const PAGE_TITLE: Record<DockTab, string> = {
   map: 'Map',
   route: 'Route',
-  data: 'Data',
+  data: 'Telemetry',
   fusion: 'Fusion',
   'ai-lab': 'AI Lab',
-  stats: 'Stats',
+  stats: 'Analysis',
 };
 
 const DOCK_HEIGHT = 64;
@@ -135,40 +167,35 @@ export const App: React.FC = () => {
     acquireCurrentLocation,
   } = useLocationTracker();
 
+  const { isDark, toggleTheme } = useTheme();
+
   const [isArchitectureOpen, setIsArchitectureOpen] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<DockTab>('map');
   const [mapLayer, setMapLayer] = useState<MapLayerType>('satellite');
 
-  // Responsive helper: are we on a desktop-class viewport (lg+, ≥1024px)?
-  // The "ANALYSIS" dock button opens a slide-up panel on desktop instead of
-  // navigating to a dedicated page (the panel is dock-attached with backdrop blur).
-  const [isDesktopViewport, setIsDesktopViewport] = useState<boolean>(false);
-  useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
-    const mq = window.matchMedia('(min-width: 1024px)');
-    const apply = () => setIsDesktopViewport(mq.matches);
-    apply();
-    if (mq.addEventListener) mq.addEventListener('change', apply);
-    else mq.addListener(apply);
-    return () => {
-      if (mq.removeEventListener) mq.removeEventListener('change', apply);
-      else mq.removeListener(apply);
-    };
-  }, []);
+  const bp = useBreakpoint();
+  const isDesktop = bp === 'desktop';
+  const isTablet = bp === 'tablet';
+  const isDesktopOrTablet = isDesktop || isTablet;
 
-  // Derived: the slide-up analysis panel is open when the user has selected the
-  // STATS tab *and* we're on a desktop-class viewport.
-  const isAnalysisPanelOpen = activeTab === 'stats' && isDesktopViewport;
+  // Mobile/tablet only: opens the dock analysis panel on desktop for the stats tab
+  const isAnalysisPanelOpen = activeTab === 'stats' && isDesktop;
 
-  // Handle dock tab changes — on desktop, STATS toggles the panel;
-  // on mobile/tablet it switches pages (page-mode is handled in the render below).
   const handleDockTabChange = (tab: DockTab) => {
-    if (tab === 'stats' && isDesktopViewport) {
+    if (tab === 'stats' && isDesktop) {
       setActiveTab((prev) => (prev === 'stats' ? 'map' : 'stats'));
       return;
     }
     setActiveTab(tab);
+  };
+
+  const handleSidebarSelect = (key: SidebarKey) => {
+    if (key === 'settings') {
+      setIsSettingsOpen(true);
+      return;
+    }
+    setActiveTab(SIDEBAR_TO_DOCK[key]);
   };
 
   const mapProps: MapBlockProps = {
@@ -195,10 +222,6 @@ export const App: React.FC = () => {
     requestSensorPermissions,
   };
 
-  // Derive accelerometer "drift" state from the variance of recent motion
-  // samples. High short-window variance (relative to a stationary baseline)
-  // suggests the sensor hasn't been calibrated or is being affected by
-  // high-frequency noise. The SettingsPanel surfaces this as a status row.
   const isAccelDrifting = (() => {
     const samples = state.recentMotion;
     if (!samples || samples.length < 10) return false;
@@ -208,10 +231,277 @@ export const App: React.FC = () => {
     const variance =
       lastN.reduce((s, m) => s + (m.filteredMagnitude - mean) ** 2, 0) /
       Math.max(lastN.length, 1);
-    // Drift if std-dev exceeds ~0.5 m/s² (raw accelerometer jitter)
     return Math.sqrt(variance) > 0.5;
   })();
 
+  // ------------------------- DESKTOP / TABLET LAYOUT -------------------------
+  if (isDesktopOrTablet) {
+    const sidebarKey: SidebarKey = DOCK_TO_SIDEBAR[activeTab] ?? 'map';
+    const mapBlock = (
+      <MapBlock {...mapProps} />
+    );
+
+    return (
+      <>
+        <DesktopShell
+          activeKey={sidebarKey}
+          onSelect={handleSidebarSelect}
+          hasPermissions={sensorStatus.permissionGranted}
+          isAiLoaded={aiMetrics.isLoaded}
+          onRequestPermissions={requestSensorPermissions}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenArchitecture={() => setIsArchitectureOpen(true)}
+        >
+          {activeTab === 'map' && (
+            <div className="w-full h-full">
+              {isDesktop ? (
+                <MapNavigationDesktop
+                  {...mapProps}
+                  headingData={telemetryProps.headingData}
+                  sensorStatus={telemetryProps.sensorStatus}
+                  gpsEnabled={telemetryProps.gpsEnabled}
+                  toggleGps={telemetryProps.toggleGps}
+                  requestSensorPermissions={telemetryProps.requestSensorPermissions}
+                />
+              ) : (
+                // Tablet: split pane — map + small right rail
+                <div
+                  className="grid"
+                  style={{
+                    gridTemplateColumns: 'minmax(0, 1fr) 360px',
+                    gap: 12,
+                    padding: 16,
+                    height: '100%',
+                    width: '100%',
+                  }}
+                >
+                  <div style={{ minHeight: 0 }}>{mapBlock}</div>
+                  <div
+                    className="flex flex-col"
+                    style={{ gap: 12, minHeight: 0, overflowY: 'auto', paddingRight: 4 }}
+                  >
+                    <TelemetryBlock {...telemetryProps} />
+                    <CompassDial
+                      fallbackHeading={state.headingData.heading}
+                      fallbackSource={state.headingData.source}
+                      pitch={state.headingData.pitch}
+                      calibrated={state.headingData.calibrated}
+                      navigationMetrics={state.navigationMetrics}
+                      sensorStatus={sensorStatus}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'data' && (
+            <div className="w-full h-full">
+              {isDesktop ? (
+                <TelemetryAnalysisDesktop
+                  recentMotion={state.recentMotion}
+                  navigationMetrics={state.navigationMetrics}
+                />
+              ) : (
+                // Tablet: IMU + quick telemetry
+                <div
+                  className="grid"
+                  style={{
+                    gridTemplateColumns: 'minmax(0, 1fr) 360px',
+                    gap: 12,
+                    padding: 16,
+                    height: '100%',
+                  }}
+                >
+                  <SensorWaveform recentMotion={state.recentMotion} peakThreshold={0.25} />
+                  <div
+                    className="flex flex-col"
+                    style={{ gap: 12, minHeight: 0, overflowY: 'auto' }}
+                  >
+                    <AIModelStatusPanel
+                      aiMetrics={aiMetrics}
+                      onOpenArchitecture={() => setIsArchitectureOpen(true)}
+                    />
+                    <SimulatorControls
+                      isSimulating={sensorStatus.isSimulating}
+                      currentHeading={state.headingData.heading}
+                      onInjectSample={injectSample}
+                      onToggleSimulator={toggleMotionSimulator}
+                      onSetHeading={setManualHeading}
+                      onResetTracking={resetTracking}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'stats' && (
+            <div className="w-full h-full">
+              {isDesktop ? (
+                <SignalAnalysisDesktop />
+              ) : (
+                <div
+                  className="grid"
+                  style={{
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: 12,
+                    padding: 16,
+                  }}
+                >
+                  <AIModelStatusPanel
+                    aiMetrics={aiMetrics}
+                    onOpenArchitecture={() => setIsArchitectureOpen(true)}
+                  />
+                  <SimulatorControls
+                    isSimulating={sensorStatus.isSimulating}
+                    currentHeading={state.headingData.heading}
+                    onInjectSample={injectSample}
+                    onToggleSimulator={toggleMotionSimulator}
+                    onSetHeading={setManualHeading}
+                    onResetTracking={resetTracking}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'route' && (
+            <div className="w-full h-full">
+              {isDesktop ? (
+                <RoutePlanningDesktop {...mapProps} />
+              ) : (
+                <div style={{ padding: 16 }}>
+                  <RoutePlanning />
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'fusion' && (
+            <div className="w-full h-full">
+              {isDesktop ? (
+                <FusionHealthDesktop />
+              ) : (
+                <div style={{ padding: 16 }}>
+                  <FusionHealth />
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'ai-lab' && (
+            <div className="w-full h-full">
+              {isDesktop ? (
+                <AILabDesktop
+                  onOpenArchitecture={() => setIsArchitectureOpen(true)}
+                />
+              ) : (
+                <div style={{ padding: 16 }}>
+                  <AILab />
+                </div>
+              )}
+            </div>
+          )}
+        </DesktopShell>
+
+        {/* Desktop: Settings opens as fullscreen overlay (use the desktop layout) */}
+        {isDesktop && isSettingsOpen && (
+          <div
+            className="fixed inset-0 z-[1000] overflow-auto"
+            style={{ background: 'var(--color-bg-primary)' }}
+          >
+            <div className="flex items-center justify-between" style={{ padding: 24 }}>
+              <button
+                type="button"
+                onClick={() => setIsSettingsOpen(false)}
+                className="flex items-center"
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: 10,
+                  background: 'var(--color-bg-elevated)',
+                  border: '1px solid var(--color-border)',
+                  color: 'var(--color-text-primary)',
+                  cursor: 'pointer',
+                  gap: 8,
+                  fontSize: 12,
+                  fontWeight: 600,
+                }}
+              >
+                <Icon name="arrow_back" size={18} />
+                Back
+              </button>
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="flex items-center"
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: 10,
+                  background: 'var(--color-bg-elevated)',
+                  border: '1px solid var(--color-border)',
+                  color: 'var(--color-text-primary)',
+                  cursor: 'pointer',
+                  gap: 8,
+                  fontSize: 12,
+                  fontWeight: 600,
+                }}
+              >
+                <Icon name={isDark ? 'light_mode' : 'dark_mode'} size={18} />
+                {isDark ? 'Light Mode' : 'Dark Mode'}
+              </button>
+            </div>
+            <SettingsDesktop
+              onToggleTheme={toggleTheme}
+            />
+            <div
+              className="flex justify-center"
+              style={{ padding: '0 32px 32px 32px' }}
+            >
+              <button
+                type="button"
+                onClick={() => setIsSettingsOpen(false)}
+                style={{
+                  padding: '12px 24px',
+                  borderRadius: 10,
+                  background: 'var(--color-accent)',
+                  color: 'var(--color-text-inverse)',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  letterSpacing: '0.10em',
+                  textTransform: 'uppercase',
+                }}
+              >
+                Close Settings
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Mobile/tablet: use the original panel (it's already full-screen modal) */}
+        {!isDesktop && (
+          <SettingsPanel
+            open={isSettingsOpen}
+            onClose={() => setIsSettingsOpen(false)}
+            sensorStatus={sensorStatus}
+            headingData={state.headingData}
+            activeMapLayer={mapLayer}
+            onChangeMapLayer={setMapLayer}
+            isAccelDrifting={isAccelDrifting}
+          />
+        )}
+
+        <AIArchitectureModal
+          isOpen={isArchitectureOpen}
+          onClose={() => setIsArchitectureOpen(false)}
+        />
+      </>
+    );
+  }
+
+  // ------------------------- MOBILE LAYOUT (unchanged) -------------------------
   return (
     <div
       className="flex flex-col w-full h-screen overflow-hidden select-none"
@@ -234,10 +524,6 @@ export const App: React.FC = () => {
         onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
-      {/* Page content. The Header is a normal flex child above this <main>
-          (NOT position:fixed), so the page already starts directly below
-          the 64px header — no extra top padding is needed. The bottom dock
-          is fixed-positioned, so we reserve space at the bottom for it. */}
       <main
         className="flex-1 min-h-0 overflow-y-auto md:overflow-hidden scrollbar-hide"
         style={{
@@ -253,19 +539,16 @@ export const App: React.FC = () => {
                        lg:grid-cols-[minmax(0,1fr)_420px] lg:gap-5 lg:p-6
                        md:h-full md:overflow-hidden"
           >
-            {/* Left column: map only */}
             <div
               className="h-[min(42vh,380px)] flex-none md:flex-1 md:min-h-0 md:h-full"
             >
               <MapBlock {...mapProps} />
             </div>
 
-            {/* Right column: telemetry bento (top) + compass dial (below) */}
             <div
               className="md:overflow-y-auto md:pr-1 md:min-h-0 scrollbar-hide flex flex-col gap-3"
             >
               <TelemetryBlock {...telemetryProps} />
-              {/* Compass dial below the bento on desktop */}
               <div className="hidden lg:block">
                 <CompassDial
                   fallbackHeading={state.headingData.heading}
@@ -280,23 +563,18 @@ export const App: React.FC = () => {
           </div>
         )}
 
-        {/* DATA page (formerly TELEMETRY) — mobile + tablet only.
-            Shows the map + compass dial + IMU signal analysis. Telemetry bento
-            (COORDS/SPEED/HEADING/DISTANCE) lives on the MAP page only. */}
         {activeTab === 'data' && (
           <div
             className="flex flex-col gap-3 px-4 pb-4
                        md:grid md:grid-cols-[minmax(0,1fr)_380px] md:gap-4 md:p-5
                        md:h-full md:overflow-hidden"
           >
-            {/* Left column: map + compass on mobile; just the map on tablet */}
             <div
               className="flex flex-col gap-3 md:min-h-0 md:h-full md:overflow-y-auto scrollbar-hide"
             >
               <div className="h-[min(34vh,320px)] flex-none md:flex-none md:h-[min(34vh,360px)]">
                 <MapBlock {...mapProps} />
               </div>
-              {/* Compass below the map on mobile only — on tablet the IMU panel takes the right rail instead */}
               <div className="md:hidden">
                 <CompassDial
                   fallbackHeading={state.headingData.heading}
@@ -309,7 +587,6 @@ export const App: React.FC = () => {
               </div>
             </div>
 
-            {/* Right column: IMU signal analysis on tablet; on mobile it sits below */}
             <div
               className="md:overflow-y-auto md:pr-1 md:min-h-0 scrollbar-hide flex flex-col gap-3"
             >
@@ -317,7 +594,6 @@ export const App: React.FC = () => {
                 recentMotion={state.recentMotion}
                 peakThreshold={0.25}
               />
-              {/* Compass on tablet (right rail, below IMU) — on mobile the compass is in the left column */}
               <div className="hidden md:block">
                 <CompassDial
                   fallbackHeading={state.headingData.heading}
@@ -332,10 +608,7 @@ export const App: React.FC = () => {
           </div>
         )}
 
-        {/* STATS page (formerly ANALYSIS) — only on mobile/tablet; desktop opens the dock panel instead.
-            IMU signal analysis lives on the DATA view, so this page just
-            shows the AI model status + simulator controls. */}
-        {activeTab === 'stats' && !isDesktopViewport && (
+        {activeTab === 'stats' && (
           <div
             className="flex flex-col gap-3 px-4 pb-4
                        md:h-full md:overflow-hidden"
@@ -359,21 +632,18 @@ export const App: React.FC = () => {
           </div>
         )}
 
-        {/* ROUTE page — Route planning UI */}
         {activeTab === 'route' && (
           <div className="px-4 pb-4 md:p-5">
             <RoutePlanning />
           </div>
         )}
 
-        {/* FUSION page — Fusion engine health */}
         {activeTab === 'fusion' && (
           <div className="px-4 pb-4 md:p-5">
             <FusionHealth />
           </div>
         )}
 
-        {/* AI LAB page — AI filter diagnostics */}
         {activeTab === 'ai-lab' && (
           <div className="px-4 pb-4 md:p-5">
             <AILab />
@@ -381,10 +651,8 @@ export const App: React.FC = () => {
         )}
       </main>
 
-      {/* Bottom tab bar — visible on all sizes */}
       <MobileDock activeTab={activeTab} onChangeTab={handleDockTabChange} />
 
-      {/* Desktop-only slide-up analysis panel attached to the dock */}
       <DockAnalysisPanel
         open={isAnalysisPanelOpen}
         onClose={() => setActiveTab('map')}
@@ -403,13 +671,11 @@ export const App: React.FC = () => {
         onResetTracking={resetTracking}
       />
 
-      {/* AI Architecture Modal */}
       <AIArchitectureModal
         isOpen={isArchitectureOpen}
         onClose={() => setIsArchitectureOpen(false)}
       />
 
-      {/* System Settings Panel */}
       <SettingsPanel
         open={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}

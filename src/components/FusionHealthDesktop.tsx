@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Icon } from './Icon';
-import type { NavigationMetrics, SensorStatus } from '../types';
 
 interface FusionHealthDesktopProps {
-  navigationMetrics: NavigationMetrics;
-  sensorStatus: SensorStatus;
+  navigationMetrics?: never;
+  sensorStatus?: never;
 }
 
 export const FusionHealthDesktop: React.FC<FusionHealthDesktopProps> = () => {

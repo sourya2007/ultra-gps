@@ -2,11 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
 import { MapView } from './MapView';
 import type {
-  AIInferenceMetrics,
   Coordinates,
   HeadingData,
   MapLayerType,
-  NavigationMetrics,
   PathPoint,
   SensorStatus,
   TrackingMode,
@@ -21,9 +19,7 @@ interface MapNavigationDesktopProps {
   setManualLocation: (lat: number, lng: number) => void;
   acquireCurrentLocation: () => void;
   headingData: HeadingData;
-  navigationMetrics: NavigationMetrics;
   sensorStatus: SensorStatus;
-  aiMetrics: AIInferenceMetrics;
   gpsEnabled: boolean;
   toggleGps: () => void;
   requestSensorPermissions: () => void;
@@ -58,7 +54,6 @@ export const MapNavigationDesktop: React.FC<MapNavigationDesktopProps> = (props)
     setManualLocation,
     acquireCurrentLocation,
     headingData,
-    navigationMetrics,
     sensorStatus,
     gpsEnabled,
     toggleGps,
@@ -528,11 +523,12 @@ export const MapNavigationDesktop: React.FC<MapNavigationDesktopProps> = (props)
                 textTransform: 'uppercase',
                 cursor: 'pointer',
               }}
+              title={sensorStatus.gpsStatusText}
             >
               <Icon
-                name="layers"
+                name={gpsEnabled ? 'cell_tower' : 'cell_off'}
                 size={20}
-                style={{ color: 'var(--color-text-primary)' }}
+                style={{ color: gpsEnabled ? 'var(--color-accent-text)' : 'var(--color-text-primary)' }}
               />
               {gpsEnabled ? 'GPS: ON' : 'GPS: OFF'}
             </button>

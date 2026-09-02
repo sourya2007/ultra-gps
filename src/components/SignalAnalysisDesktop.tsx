@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Icon } from './Icon';
-import type { NavigationMetrics, SensorStatus } from '../types';
 
 interface SignalAnalysisDesktopProps {
-  navigationMetrics: NavigationMetrics;
-  sensorStatus: SensorStatus;
+  navigationMetrics?: never;
+  sensorStatus?: never;
 }
 
 const SAMPLE_NMEA = [
@@ -440,7 +439,6 @@ export const SignalAnalysisDesktop: React.FC<SignalAnalysisDesktopProps> = () =>
               className="uppercase"
               style={{
                 margin: 0,
-                fontBottom: 16,
                 fontSize: 11,
                 letterSpacing: '0.10em',
                 fontWeight: 700,

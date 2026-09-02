@@ -1,32 +1,19 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
-import type {
-  AIInferenceMetrics,
-  HeadingData,
-  MotionSample,
-  NavigationMetrics,
-  SensorStatus,
-} from '../types';
+import type { NavigationMetrics } from '../types';
 
 interface TelemetryAnalysisDesktopProps {
-  recentMotion: MotionSample[];
+  recentMotion: unknown[];
   navigationMetrics: NavigationMetrics;
-  headingData: HeadingData;
-  sensorStatus: SensorStatus;
-  aiMetrics: AIInferenceMetrics;
   onOpenArchitecture?: () => void;
 }
 
 export const TelemetryAnalysisDesktop: React.FC<TelemetryAnalysisDesktopProps> = ({
-  recentMotion,
   navigationMetrics,
-  headingData,
-  sensorStatus,
-  aiMetrics,
-  onOpenArchitecture,
+  onOpenArchitecture: _onOpenArchitecture,
 }) => {
-  const [exportLog, setExportLog] = useState(false);
   const [recalibrate, setRecalibrate] = useState(false);
+  const [, setExportLog] = useState(false);
 
   // Animated IMU graph
   const lineRef = useRef<SVGPathElement | null>(null);
@@ -40,7 +27,6 @@ export const TelemetryAnalysisDesktop: React.FC<TelemetryAnalysisDesktopProps> =
   useEffect(() => {
     let raf = 0;
     const width = 1000;
-    const height = 200;
     const numPoints = 200;
     const data: number[] = new Array(numPoints).fill(100);
     let phase = 0;
