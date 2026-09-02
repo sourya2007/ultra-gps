@@ -52,6 +52,29 @@ export function calculateDestinationPoint(
 }
 
 /**
+ * Calculates the initial bearing (in degrees, true north = 0° clockwise)
+ * from the first point to the second point along a great circle path.
+ */
+export function calculateBearing(
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number
+): number {
+  const phi1 = degreesToRadians(lat1);
+  const phi2 = degreesToRadians(lat2);
+  const deltaLambda = degreesToRadians(lng2 - lng1);
+
+  const y = Math.sin(deltaLambda) * Math.cos(phi2);
+  const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(deltaLambda);
+
+  let bearing = radiansToDegrees(Math.atan2(y, x));
+  bearing = (bearing + 360) % 360;
+
+  return bearing;
+}
+
+/**
  * Calculates great-circle distance between two points using the Haversine formula (in meters).
  */
 export function calculateHaversineDistance(
@@ -72,4 +95,36 @@ export function calculateHaversineDistance(
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
   return EARTH_RADIUS_METERS * c;
+}
+
+/**
+ * Calculates the estimated time of arrival given distance in meters
+ * and speed in meters per second.
+ */
+export function calculateETA(distanceMeters: number, speedMps: number): number {
+  if (speedMps <= 0 || distanceMeters <= 0) return 0;
+  const minutes = (distanceMeters / speedMps) / 60;
+  return Math.round(minutes);
+}
+
+/**
+ * Calculates the distance and bearing from current location to a waypoint,
+ * and returns the ETA based on current speed.
+ */
+export function calculateWaypointInfo(
+  currentLat: number,
+  currentLng: number,
+  waypointLat: number,
+  waypointLng: number,
+  currentSpeedMps: number
+): {
+  distanceMeters: number;
+  bearingDegrees: number;
+  etaMinutes: number;
+} {
+  const distance = calculateHaversineDistance(currentLat, currentLng, waypointLat, waypointLng);
+  const bearing = calculateBearing(currentLat, currentLng, waypointLat, waypointLng);
+  const eta = calculateETA(distance, currentSpeedMps);
+
+  return { distanceMeters: Number(distance.toFixed(2)), bearingDegrees: Number(bearing.toFixed(2)), etaMinutes: eta };
 }

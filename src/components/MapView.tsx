@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import type { Coordinates, MapLayerType, PathPoint, TrackingMode } from '../types';
+import type { Coordinates, MapLayerType, PathPoint, TrackingMode, Waypoint } from '../types';
 import { Icon } from './Icon';
 
 interface MapViewProps {
@@ -9,6 +9,7 @@ interface MapViewProps {
   heading: number;
   mode: TrackingMode;
   path: PathPoint[];
+  waypoints?: Waypoint[];
   hasReceivedFix?: boolean;
   onSetLocation?: (lat: number, lng: number) => void;
   onLocateNow?: () => void;
@@ -22,6 +23,7 @@ export const MapView: React.FC<MapViewProps> = ({
   heading,
   mode,
   path,
+  waypoints,
   hasReceivedFix = false,
   onSetLocation,
   onLocateNow,
@@ -36,6 +38,8 @@ export const MapView: React.FC<MapViewProps> = ({
   const accuracyCircleRef = useRef<L.Circle | null>(null);
   const gpsPolylineRef = useRef<L.Polyline | null>(null);
   const aiPolylineRef = useRef<L.Polyline | null>(null);
+  const waypointMarkersRef = useRef<L.Marker[]>([]);
+  const routePolylineRef = useRef<L.Polyline | null>(null);
   const autoFollowRef = useRef<boolean>(true);
   const initialCenteredRef = useRef<boolean>(false);
   const prevModeRef = useRef<TrackingMode>(mode);
@@ -311,6 +315,65 @@ export const MapView: React.FC<MapViewProps> = ({
       aiPolylineRef.current.setLatLngs(aiPoints);
     }
   }, [path]);
+
+  // Plot waypoints and route
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    // Remove previous waypoint markers and route if they exist
+    if (waypointMarkersRef.current) {
+      waypointMarkersRef.current.forEach((marker) => map.removeLayer(marker));
+    }
+    if (routePolylineRef.current) {
+      map.removeLayer(routePolylineRef.current);
+    }
+
+    // Render waypoint markers
+    const markers: L.Marker[] = [];
+    if (waypoints) {
+      waypoints.forEach((wp) => {
+        const marker = L.marker([wp.latitude, wp.longitude], {
+          icon: L.divIcon({
+            className: 'custom-waypoint-marker',
+            html: `
+              <div style="
+                width: 20px; height: 20px;
+                background: var(--color-accent);
+                border: 2px solid var(--color-bg-elevated);
+                border-radius: 50%;
+                position: relative;
+              ">
+                <span style={{
+                  position: 'absolute', top: 50%, left: 50%',
+                  transform: 'translate(-50%, -50%)',
+                  color: 'var(--color-text-inverse)', fontWeight: 700, fontSize: 10
+                }>
+                  {wp.label.charAt(0)}
+                </span>
+              </div>
+            `,
+            iconSize: [20, 20],
+          }),
+        }).addTo(map);
+        markers.push(marker);
+      });
+    }
+    waypointMarkersRef.current = markers;
+
+    // Render route polyline through waypoints
+    if (waypoints && waypoints.length > 1) {
+      const latLngs: L.LatLngTuple[] = waypoints.map((wp) => [wp.latitude, wp.longitude] as L.LatLngTuple);
+      routePolylineRef.current = L.polyline(latLngs, {
+        color: '#c3f38b',
+        weight: 4,
+        opacity: 0.9,
+        dashArray: '8, 8',
+      }).addTo(map);
+    } else {
+      routePolylineRef.current = null;
+    }
+  }, [waypoints]);
 
   const handleCenterMap = () => {
     if (!mapInstanceRef.current) return;

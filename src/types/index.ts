@@ -11,6 +11,24 @@ export interface Coordinates {
   heading?: number | null;
 }
 
+export interface Coordinates {
+  latitude: number;
+  longitude: number;
+  altitude?: number | null;
+  accuracy?: number | null;
+  speed?: number | null;
+  heading?: number | null;
+}
+
+export interface Waypoint {
+  id: string;
+  label: string;
+  latitude: number;
+  longitude: number;
+  estimatedEtaMinutes?: number;
+  notes?: string;
+}
+
 export interface HeadingData {
   heading: number; // 0 - 360 degrees clockwise from North
   rawHeading: number;

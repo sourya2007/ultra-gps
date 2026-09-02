@@ -18,19 +18,52 @@ const MODES: ModeSpec[] = [
   { key: 'transit', label: 'Transit', icon: 'directions_transit', duration: '35m' },
 ];
 
-export const RoutePlanning: React.FC = () => {
+interface Waypoint {
+  id: string;
+  label: string;
+  latitude: number;
+  longitude: number;
+}
+
+interface RoutePlanningProps {
+  currentLocation: { latitude: number; longitude: number } | null;
+  waypoints: { id: string; label: string; latitude: number; longitude: number }[];
+  onAddWaypoint: (label: string, lat?: number, lng?: number) => void;
+  onRemoveWaypoint: (id: string) => void;
+  routeInfo: { distanceKm: number; bearing: number; etaMinutes: number | null; waypoint: Waypoint | null } | null;
+}
+
+export const RoutePlanning: React.FC<RoutePlanningProps> = ({
+  currentLocation,
+  waypoints,
+  onAddWaypoint,
+  onRemoveWaypoint,
+  routeInfo,
+}) => {
   const { isDark } = useTheme();
-  const [from, setFrom] = useState('Your Location');
-  const [to, setTo] = useState('');
+
+  const [fromLabel, setFromLabel] = useState('Your Location');
+  const [toLabel, setToLabel] = useState('');
   const [mode, setMode] = useState<TransportMode>('car');
 
+  // If we have a first waypoint, set it as the destination label
+  React.useEffect(() => {
+    if (waypoints.length > 0) {
+      const wp = waypoints[0];
+      setToLabel(`${wp.label} (${wp.latitude.toFixed(4)}, ${wp.longitude.toFixed(4)})`);
+    } else {
+      setToLabel('');
+    }
+  }, [waypoints]);
+
   const onSwap = () => {
-    setFrom(to || 'Your Location');
-    setTo(from === 'Your Location' ? '' : from);
+    setFromLabel(toLabel || 'Your Location');
+    setToLabel(fromLabel === 'Your Location' ? '' : fromLabel);
   };
 
   const activeMode = MODES.find((m) => m.key === mode)!;
-  const distanceKm = '12.4';
+
+  const distanceKm = routeInfo ? routeInfo.distanceKm : '–';
 
   return (
     <div className="flex flex-col gap-3 w-full">
@@ -69,8 +102,8 @@ export const RoutePlanning: React.FC = () => {
                 fontFamily: 'inherit',
                 fontSize: 14,
               }}
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
+              value={fromLabel}
+              onChange={(e) => setFromLabel(e.target.value)}
               placeholder="Your Location"
               type="text"
             />
@@ -90,35 +123,107 @@ export const RoutePlanning: React.FC = () => {
             }}
           />
 
-          {/* To input */}
+          {/* To input / Waypoints list */}
           <div className="flex items-center gap-3">
-            <div
-              className="shrink-0 flex items-center justify-center"
-              style={{ width: 24, height: 24 }}
-            >
-              <Icon
-                name="location_on"
-                size={20}
-                filled
-                style={{ color: 'var(--color-error-text)' }}
-              />
-            </div>
-            <input
-              className="w-full px-3 focus:outline-none focus:ring-1 text-sm"
-              style={{
-                height: 40,
-                borderRadius: 'var(--radius-sm)',
-                background: isDark ? 'rgba(255,255,255,0.04)' : '#f5f5f5',
-                border: '1px solid transparent',
-                color: 'var(--color-text-primary)',
-                fontFamily: 'inherit',
-                fontSize: 14,
-              }}
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-              placeholder="Choose destination..."
-              type="text"
-            />
+            {waypoints.length > 0 ? (
+              <div className="flex-1">
+                <span
+                  className="uppercase font-bold"
+                  style={{
+                    fontSize: 10,
+                    letterSpacing: '0.08em',
+                    color: 'var(--color-text-tertiary)',
+                  }}
+                >
+                  Waypoints
+                </span>
+                <div className="flex flex-col gap-1">
+                  {waypoints.map((wp) => (
+                    <div
+                      key={wp.id}
+                      className="flex items-center gap-2 px-2 py-1"
+                      style={{
+                        background: 'var(--color-bg-inset)',
+                        borderRadius: 'var(--radius-sm)',
+                        fontSize: 11,
+                        color: 'var(--color-text-secondary)',
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontFamily: "'Google Sans Mono', monospace",
+                          fontSize: 10,
+                          color: 'var(--color-text-primary)',
+                        }}
+                      >
+                        {wp.label}: {wp.latitude.toFixed(4)}, {wp.longitude.toFixed(4)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => onRemoveWaypoint(wp.id)}
+                        className="flex-1 text-right uppercase"
+                        style={{
+                          fontSize: 8,
+                          color: 'var(--color-error-text)',
+                          background: 'transparent',
+                          border: 'none',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onAddWaypoint('Waypoint')}
+                  className="flex items-center justify-center pt-1"
+                  style={{
+                    marginTop: 4,
+                    padding: '4px 8px',
+                    borderRadius: 'var(--radius-sm)',
+                    background: 'var(--color-accent)',
+                    color: 'var(--color-text-inverse)',
+                    fontSize: 9,
+                    fontWeight: 600,
+                    border: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  + Add Waypoint
+                </button>
+              </div>
+            ) : (
+              <div className="flex-1">
+                <span
+                  className="uppercase font-bold"
+                  style={{
+                    fontSize: 10,
+                    letterSpacing: '0.08em',
+                    color: 'var(--color-text-tertiary)',
+                  }}
+                >
+                  Destination
+                </span>
+                <input
+                  className="w-full px-3 focus:outline-none focus:ring-1 text-sm"
+                  style={{
+                    height: 40,
+                    borderRadius: 'var(--radius-sm)',
+                    background: isDark ? 'rgba(255,255,255,0.04)' : '#f5f5f5',
+                    border: '1px solid transparent',
+                    color: 'var(--color-text-primary)',
+                    fontFamily: 'inherit',
+                    fontSize: 14,
+                  }}
+                  value={toLabel}
+                  onChange={(e) => setToLabel(e.target.value)}
+                  placeholder="Choose destination..."
+                  type="text"
+                />
+              </div>
+            )}
           </div>
 
           {/* Swap button */}
@@ -180,7 +285,7 @@ export const RoutePlanning: React.FC = () => {
         })}
       </div>
 
-      {/* Map area with animated route line */}
+      {/* Map area with route overview */}
       <div
         className="relative w-full"
         style={{
@@ -223,7 +328,7 @@ export const RoutePlanning: React.FC = () => {
           <rect width="100%" height="100%" fill="url(#route-grid)" />
         </svg>
 
-        {/* Animated route line */}
+        {/* Route overview line */}
         <svg
           aria-hidden
           className="absolute inset-0 w-full h-full"
@@ -302,7 +407,7 @@ export const RoutePlanning: React.FC = () => {
                   fontFamily: "'Google Sans Flex', sans-serif",
                 }}
               >
-                Fastest route via Main St
+                Route to {routeInfo?.waypoint?.label ?? 'destination'}
               </p>
             </div>
             <div
@@ -321,7 +426,9 @@ export const RoutePlanning: React.FC = () => {
                   color: 'var(--color-accent-text)',
                 }}
               >
-                GPS Ready
+                {currentLocation
+                  ? `GPS Ready (${currentLocation.latitude.toFixed(2)}, ${currentLocation.longitude.toFixed(2)})`
+                  : 'GPS Searching'}
               </span>
             </div>
           </div>
@@ -343,7 +450,9 @@ export const RoutePlanning: React.FC = () => {
             }}
           >
             <Icon name="navigation" size={22} filled />
-            <span>START NAVIGATION</span>
+            <span>
+              {waypoints.length > 0 ? 'START NAVIGATION' : 'SET DESTINATION'}
+            </span>
           </button>
         </div>
       </div>

@@ -18,6 +18,10 @@ interface RoutePlanningDesktopProps {
   acquireCurrentLocation: () => void;
   activeLayer?: MapLayerType;
   onChangeLayer?: (layer: MapLayerType) => void;
+  waypoints?: { id: string; label: string; latitude: number; longitude: number }[];
+  onAddWaypoint?: (label: string, lat?: number, lng?: number) => void;
+  onRemoveWaypoint?: (id: string) => void;
+  routeInfo?: { distanceKm: number; bearing: number; etaMinutes: number | null; waypoint: { id: string; label: string; latitude: number; longitude: number } | null } | null;
 }
 
 type TransportMode = 'car' | 'walk' | 'bike' | 'transit';
@@ -33,11 +37,10 @@ const MAP_BG =
   'https://lh3.googleusercontent.com/aida-public/AB6AXuBDBscuEB0_XWwo8xhiJ4h1xTfIQHRdQUPnp7RxNG3QwZcm6hCOlRI6AWL79itZUuv2ZF0KKeWNf5hKsyMXKwiTwEm6c-FqpKTw4JgdXXj1D5E8xEsVEFBoEWJf1zgOeyr_qpF27xlBUOI7lWXpCNUUx1e4eITo8GHjR0S1DJKaUBH6pLh9cQx57u1api-VW9OmCul5kLzFmAjPPVILac54FO0sKgwYCCBtrVYjZYLKxcqTVjJrm9Xe';
 
 export const RoutePlanningDesktop: React.FC<RoutePlanningDesktopProps> = (props) => {
-  const { location, heading, mode, path, hasReceivedFix, setManualLocation, acquireCurrentLocation, activeLayer, onChangeLayer } = props;
-  const [from] = useState('Current Location');
+  const { location, heading, mode, path, hasReceivedFix, setManualLocation, acquireCurrentLocation, activeLayer, onChangeLayer, waypoints: waypointsProp, onAddWaypoint, onRemoveWaypoint, routeInfo } = props;
+  const waypoints = waypointsProp ?? [];
   const [to, setTo] = useState('47.6205° N, 122.3493° W');
   const [modeSel, setModeSel] = useState<TransportMode>('car');
-  const [waypoints, setWaypoints] = useState<string[]>([]);
 
   return (
     <div
@@ -142,7 +145,7 @@ export const RoutePlanningDesktop: React.FC<RoutePlanningDesktopProps> = (props)
                 Origin
               </label>
               <input
-                value={from}
+                value={`${location.latitude.toFixed(4)}° N, ${location.longitude.toFixed(4)}° W`}
                 readOnly
                 type="text"
                 className="w-full"
@@ -159,8 +162,8 @@ export const RoutePlanningDesktop: React.FC<RoutePlanningDesktopProps> = (props)
           </div>
 
           {/* Waypoints */}
-          {waypoints.map((wp, i) => (
-            <div key={i} className="flex items-center" style={{ gap: 16, paddingLeft: 48 }}>
+          {waypoints.map((wp) => (
+            <div key={wp.id} className="flex items-center" style={{ gap: 8, paddingLeft: 48 }}>
               <div
                 style={{
                   width: 8,
@@ -175,20 +178,21 @@ export const RoutePlanningDesktop: React.FC<RoutePlanningDesktopProps> = (props)
                   background: 'var(--color-bg-inset)',
                   borderRadius: 10,
                   padding: 12,
-                  fontSize: 14,
+                  fontSize: 11,
                   color: 'var(--color-text-primary)',
                   fontFamily: "'Google Sans Mono',monospace",
                 }}
               >
-                {wp}
+                {wp.label}: {wp.latitude.toFixed(4)}, {wp.longitude.toFixed(4)}
               </div>
+              <button type="button" onClick={() => onRemoveWaypoint?.(wp.id)} style={{ fontSize: 10, color: 'var(--color-error-text)', background: 'transparent', border: 'none', cursor: 'pointer' }}>Remove</button>
             </div>
           ))}
 
           {/* Add waypoint */}
           <button
             type="button"
-            onClick={() => setWaypoints((w) => [...w, `Waypoint ${w.length + 1}`])}
+            onClick={() => onAddWaypoint?.(`Waypoint ${waypoints.length + 1}`)}
             className="flex items-center"
             style={{
               gap: 16,
@@ -466,7 +470,7 @@ export const RoutePlanningDesktop: React.FC<RoutePlanningDesktopProps> = (props)
                   color: 'var(--color-accent-text)',
                 }}
               >
-                02:45:00
+                {routeInfo?.etaMinutes != null ? `${routeInfo.etaMinutes} min` : '—'}
               </div>
             </div>
             <div style={{ textAlign: 'right' }}>
@@ -490,7 +494,7 @@ export const RoutePlanningDesktop: React.FC<RoutePlanningDesktopProps> = (props)
                   color: 'var(--color-accent-text)',
                 }}
               >
-                142.8 km
+                {routeInfo ? `${routeInfo.distanceKm} km · ${routeInfo.bearing}°` : '—'}
               </div>
             </div>
           </div>

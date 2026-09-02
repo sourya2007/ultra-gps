@@ -25,6 +25,7 @@ import { FusionHealthDesktop } from './components/FusionHealthDesktop';
 import { AILabDesktop } from './components/AILabDesktop';
 import { SettingsDesktop } from './components/SettingsDesktop';
 import { useTheme } from './context/ThemeContext';
+import { calculateWaypointInfo } from './utils/geodesy';
 import type {
   Coordinates,
   HeadingData,
@@ -33,6 +34,7 @@ import type {
   SensorStatus,
   TrackingMode,
   PathPoint,
+  Waypoint,
 } from './types';
 import type { AIInferenceMetrics } from './types';
 
@@ -73,6 +75,7 @@ interface MapBlockProps {
   heading: number;
   mode: TrackingMode;
   path: PathPoint[];
+  waypoints?: Waypoint[];
   hasReceivedFix: boolean;
   setManualLocation: (lat: number, lng: number) => void;
   acquireCurrentLocation: () => void;
@@ -85,6 +88,7 @@ const MapBlock: React.FC<MapBlockProps> = ({
   heading,
   mode,
   path,
+  waypoints,
   hasReceivedFix,
   setManualLocation,
   acquireCurrentLocation,
@@ -105,6 +109,7 @@ const MapBlock: React.FC<MapBlockProps> = ({
       heading={heading}
       mode={mode}
       path={path}
+      waypoints={waypoints}
       hasReceivedFix={hasReceivedFix}
       onSetLocation={setManualLocation}
       onLocateNow={acquireCurrentLocation}
@@ -173,6 +178,7 @@ export const App: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<DockTab>('map');
   const [mapLayer, setMapLayer] = useState<MapLayerType>('satellite');
+  const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
 
   const bp = useBreakpoint();
   const isDesktop = bp === 'desktop';
@@ -190,6 +196,40 @@ export const App: React.FC = () => {
     setActiveTab(tab);
   };
 
+  const addWaypoint = (label: string, lat?: number, lng?: number) => {
+    const location = state.currentLocation;
+    const newWaypoint: Waypoint = {
+      id: crypto.randomUUID(),
+      label,
+      latitude: lat ?? location.latitude,
+      longitude: lng ?? location.longitude,
+    };
+    setWaypoints((prev) => [...prev, newWaypoint]);
+  };
+
+  const removeWaypoint = (id: string) => {
+    setWaypoints((prev) => prev.filter((wp) => wp.id !== id));
+  };
+
+  const calculateRouteInfo = () => {
+    if (!state.currentLocation || waypoints.length === 0) return null;
+    const current = state.currentLocation;
+    const firstWaypoint = waypoints[0];
+    const { distanceMeters, bearingDegrees, etaMinutes } = calculateWaypointInfo(
+      current.latitude,
+      current.longitude,
+      firstWaypoint.latitude,
+      firstWaypoint.longitude,
+      state.navigationMetrics.currentSpeedMps
+    );
+    return {
+      distanceKm: Number((distanceMeters / 1000).toFixed(2)),
+      bearing: Number(bearingDegrees.toFixed(0)),
+      etaMinutes,
+      waypoint: firstWaypoint,
+    };
+  };
+
   const handleSidebarSelect = (key: SidebarKey) => {
     if (key === 'settings') {
       setIsSettingsOpen(true);
@@ -203,6 +243,7 @@ export const App: React.FC = () => {
     heading: state.headingData.heading,
     mode: state.mode,
     path: state.pathHistory,
+    waypoints,
     hasReceivedFix: state.hasReceivedFix,
     setManualLocation,
     acquireCurrentLocation,
@@ -369,10 +410,22 @@ export const App: React.FC = () => {
           {activeTab === 'route' && (
             <div className="w-full h-full">
               {isDesktop ? (
-                <RoutePlanningDesktop {...mapProps} />
+                <RoutePlanningDesktop
+                  {...mapProps}
+                  waypoints={waypoints}
+                  onAddWaypoint={addWaypoint}
+                  onRemoveWaypoint={removeWaypoint}
+                  routeInfo={calculateRouteInfo()}
+                />
               ) : (
                 <div style={{ padding: 16 }}>
-                  <RoutePlanning />
+                  <RoutePlanning
+                    currentLocation={state.currentLocation}
+                    waypoints={waypoints}
+                    onAddWaypoint={addWaypoint}
+                    onRemoveWaypoint={removeWaypoint}
+                    routeInfo={calculateRouteInfo()}
+                  />
                 </div>
               )}
             </div>
@@ -634,7 +687,7 @@ export const App: React.FC = () => {
 
         {activeTab === 'route' && (
           <div className="px-4 pb-4 md:p-5">
-            <RoutePlanning />
+            <RoutePlanning currentLocation={state.currentLocation} waypoints={waypoints} onAddWaypoint={addWaypoint} onRemoveWaypoint={removeWaypoint} routeInfo={calculateRouteInfo()} />
           </div>
         )}
 
