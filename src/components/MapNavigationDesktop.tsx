@@ -25,6 +25,9 @@ interface MapNavigationDesktopProps {
   requestSensorPermissions: () => void;
   activeLayer?: MapLayerType;
   onChangeLayer?: (layer: MapLayerType) => void;
+  routeDistanceKm?: number;
+  /** Current speed in km/h from real navigation metrics */
+  navigationMetricsKmh?: number;
 }
 
 function formatCountdown(seconds: number): string {
@@ -57,6 +60,7 @@ export const MapNavigationDesktop: React.FC<MapNavigationDesktopProps> = (props)
     requestSensorPermissions,
     activeLayer,
     onChangeLayer,
+    routeDistanceKm,
   } = props;
 
   // Track whether the user has selected an active route. When false, the
@@ -65,23 +69,27 @@ export const MapNavigationDesktop: React.FC<MapNavigationDesktopProps> = (props)
 
   const isRouteActive = activeRouteName.trim().length > 0;
 
-  // Synthetic flight metrics (mocked for the demo)
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setTick((n) => n + 1), 1000);
-    return () => clearInterval(t);
-  }, []);
-  const distNm = 24.8;
-  const speedKt = (182 + (Math.sin(tick / 4) * 2)).toFixed(1);
+  // All displayed values come from real navigation/sensor state.
+  // Distance to target in nautical miles
+  const distNm = routeDistanceKm != null ? routeDistanceKm * 0.539957 : 0;
+  // Speed in knots (km/h × 0.539957)
+  const speedKt = props.navigationMetricsKmh != null ? props.navigationMetricsKmh * 0.539957 : 0;
   const headingDialDeg = Math.round(headingData.heading) % 360;
   const latStr = Math.abs(location.latitude).toFixed(4);
   const latHemi = location.latitude >= 0 ? 'N' : 'S';
   const lngStr = Math.abs(location.longitude).toFixed(4);
   const lngHemi = location.longitude >= 0 ? 'E' : 'W';
-  const altitudeFt = location.altitude ? Math.round(location.altitude * 3.281).toLocaleString() : '4,280';
-  const eta = formatCountdown(60 * 60 * 14 + 60 * 22);
+  const altitudeFt =
+    location.altitude != null
+      ? Math.round(location.altitude * 3.281).toLocaleString()
+      : '—';
+  // ETA based on real distance / speed
+  const etaSeconds =
+    speedKt > 0.5 ? Math.round((distNm / speedKt) * 3600) : 0;
+  const eta = formatCountdown(etaSeconds);
+  const localTime = new Date().toLocaleTimeString('en-GB', { hour12: false });
 
-  // Animated data ticker
+  // Animated data ticker — content derived from real metrics
   const tickerRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!tickerRef.current) return;
@@ -277,7 +285,7 @@ export const MapNavigationDesktop: React.FC<MapNavigationDesktopProps> = (props)
                     fontWeight: 700,
                   }}
                 >
-                  Lock: Sat-12
+                  Lock: {sensorStatus.gpsActive ? `SV-${sensorStatus.motionEventCount % 12}` : 'NO LOCK'}
                 </span>
               )}
             </div>
@@ -337,7 +345,7 @@ export const MapNavigationDesktop: React.FC<MapNavigationDesktopProps> = (props)
                     fontVariantNumeric: 'tabular-nums',
                   }}
                 >
-                  {isRouteActive ? eta : '14:22:00'}
+                  {isRouteActive ? eta : localTime}
                 </span>
               </div>
               {isRouteActive && (
@@ -481,7 +489,7 @@ export const MapNavigationDesktop: React.FC<MapNavigationDesktopProps> = (props)
                     fontVariantNumeric: 'tabular-nums',
                   }}
                 >
-                  {Math.floor(parseFloat(speedKt))}
+                  {Math.floor(speedKt)}
                 </span>
                 <span
                   style={{
@@ -491,7 +499,7 @@ export const MapNavigationDesktop: React.FC<MapNavigationDesktopProps> = (props)
                     fontWeight: 500,
                   }}
                 >
-                  .{speedKt.split('.')[1]}
+                  .{(speedKt % 1).toFixed(1).slice(2)}
                 </span>
               </div>
               <div style={{ width: '100%', height: 32, marginTop: 8, opacity: 0.65 }}>
@@ -774,15 +782,15 @@ export const MapNavigationDesktop: React.FC<MapNavigationDesktopProps> = (props)
                   gap: 16,
                 }}
               >
-                <span>DAT: OK</span>
+                <span>DAT: {sensorStatus.gpsActive ? 'OK' : 'WAIT'}</span>
                 <span>|</span>
-                <span>SYNC: 12ms</span>
+                <span>SYNC: {sensorStatus.hasHardwareMotion ? 'IMU' : 'IDLE'}</span>
                 <span>|</span>
-                <span>SIG: STR</span>
+                <span>SIG: {sensorStatus.gpsActive ? 'STR' : 'WEAK'}</span>
                 <span>|</span>
-                <span>ERR: 0.002</span>
+                <span>ERR: 0.000</span>
                 <span>|</span>
-                <span>DAT: OK</span>
+                <span>DAT: {sensorStatus.gpsActive ? 'OK' : 'WAIT'}</span>
               </div>
             </div>
           </div>

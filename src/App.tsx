@@ -42,32 +42,43 @@ import type { AIInferenceMetrics } from './types';
 // Map the dock tab (mobile) to the sidebar key (desktop).
 type SidebarKey = 'map' | 'route' | 'telemetry' | 'analysis' | 'fusion' | 'ai-lab' | 'calibration' | 'settings';
 
-const DOCK_TO_SIDEBAR: Record<DockTab, SidebarKey> = {
+export type ActiveTab =
+  | 'map'
+  | 'route'
+  | 'data'
+  | 'fusion'
+  | 'ai-lab'
+  | 'stats'
+  | 'calibration';
+
+const DOCK_TO_SIDEBAR: Record<ActiveTab, SidebarKey> = {
   map: 'map',
   route: 'route',
   data: 'telemetry', // mobile "data" tab = desktop "telemetry"
   fusion: 'fusion',
   'ai-lab': 'ai-lab',
   stats: 'analysis', // mobile "stats" tab = desktop "analysis"
+  calibration: 'calibration',
 };
-const SIDEBAR_TO_DOCK: Record<SidebarKey, DockTab> = {
+const SIDEBAR_TO_DOCK: Record<SidebarKey, ActiveTab> = {
   map: 'map',
   route: 'route',
   telemetry: 'data',
   analysis: 'stats',
   fusion: 'fusion',
   'ai-lab': 'ai-lab',
-  calibration: 'ai-lab', // calibration lives in sidebar on desktop; on mobile it opens the desktop overlay
+  calibration: 'calibration',
   settings: 'map', // settings opens a panel (not a dock tab) on mobile
 };
 
-const PAGE_TITLE: Record<DockTab, string> = {
+const PAGE_TITLE: Record<ActiveTab, string> = {
   map: 'Map',
   route: 'Route',
   data: 'Telemetry',
   fusion: 'Fusion',
   'ai-lab': 'AI Lab',
   stats: 'Analysis',
+  calibration: 'Calibration',
 };
 
 const DOCK_HEIGHT = 64;
@@ -178,8 +189,7 @@ export const App: React.FC = () => {
 
   const [isArchitectureOpen, setIsArchitectureOpen] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
-  const [isCalibrationOpen, setIsCalibrationOpen] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<DockTab>('map');
+  const [activeTab, setActiveTab] = useState<ActiveTab>('map');
   const [mapLayer, setMapLayer] = useState<MapLayerType>('satellite');
   const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
 
@@ -236,10 +246,6 @@ export const App: React.FC = () => {
   const handleSidebarSelect = (key: SidebarKey) => {
     if (key === 'settings') {
       setIsSettingsOpen(true);
-      return;
-    }
-    if (key === 'calibration') {
-      setIsCalibrationOpen(true);
       return;
     }
     setActiveTab(SIDEBAR_TO_DOCK[key]);
@@ -307,6 +313,7 @@ export const App: React.FC = () => {
                   {...mapProps}
                   headingData={telemetryProps.headingData}
                   sensorStatus={telemetryProps.sensorStatus}
+                  navigationMetricsKmh={state.navigationMetrics.currentSpeedKmh}
                   gpsEnabled={telemetryProps.gpsEnabled}
                   toggleGps={telemetryProps.toggleGps}
                   requestSensorPermissions={telemetryProps.requestSensorPermissions}
@@ -349,6 +356,10 @@ export const App: React.FC = () => {
                 <TelemetryAnalysisDesktop
                   recentMotion={state.recentMotion}
                   navigationMetrics={state.navigationMetrics}
+                  sensorStatus={sensorStatus}
+                  aiMetrics={aiMetrics}
+                  location={state.currentLocation}
+                  headingData={state.headingData}
                 />
               ) : (
                 // Tablet: IMU + quick telemetry
@@ -387,7 +398,11 @@ export const App: React.FC = () => {
           {activeTab === 'stats' && (
             <div className="w-full h-full">
               {isDesktop ? (
-                <SignalAnalysisDesktop />
+                <SignalAnalysisDesktop
+                  sensorStatus={sensorStatus}
+                  location={state.currentLocation}
+                  recentMotion={state.recentMotion}
+                />
               ) : (
                 <div
                   className="grid"
@@ -441,7 +456,13 @@ export const App: React.FC = () => {
           {activeTab === 'fusion' && (
             <div className="w-full h-full">
               {isDesktop ? (
-                <FusionHealthDesktop />
+                <FusionHealthDesktop
+                  sensorStatus={sensorStatus}
+                  navigationMetrics={state.navigationMetrics}
+                  headingData={state.headingData}
+                  aiMetrics={aiMetrics}
+                  recentMotion={state.recentMotion}
+                />
               ) : (
                 <div style={{ padding: 16 }}>
                   <FusionHealth />
@@ -455,12 +476,28 @@ export const App: React.FC = () => {
               {isDesktop ? (
                 <AILabDesktop
                   onOpenArchitecture={() => setIsArchitectureOpen(true)}
+                  aiMetrics={aiMetrics}
+                  recentMotion={state.recentMotion}
+                  navigationMetrics={state.navigationMetrics}
+                  sensorStatus={sensorStatus}
                 />
               ) : (
                 <div style={{ padding: 16 }}>
                   <AILab />
                 </div>
               )}
+            </div>
+          )}
+
+          {activeTab === 'calibration' && (
+            <div className="w-full h-full">
+              <CalibrationDesktop
+                sensorStatus={sensorStatus}
+                headingData={state.headingData}
+                recentMotion={state.recentMotion}
+                onResetSensors={resetTracking}
+                onConfirmAlignment={() => setActiveTab('map')}
+              />
             </div>
           )}
         </DesktopShell>
@@ -513,6 +550,10 @@ export const App: React.FC = () => {
             </div>
             <SettingsDesktop
               onToggleTheme={toggleTheme}
+              sensorStatus={sensorStatus}
+              headingData={state.headingData}
+              navigationMetrics={state.navigationMetrics}
+              aiMetrics={aiMetrics}
             />
             <div
               className="flex justify-center"
@@ -551,87 +592,6 @@ export const App: React.FC = () => {
             onChangeMapLayer={setMapLayer}
             isAccelDrifting={isAccelDrifting}
           />
-        )}
-
-        {/* Calibration overlay — fullscreen on desktop & tablet */}
-        {isCalibrationOpen && isDesktopOrTablet && (
-          <div
-            className="fixed inset-0 z-[1100] overflow-auto"
-            style={{ background: 'var(--color-bg-primary)' }}
-          >
-            <div
-              className="flex items-center justify-between"
-              style={{ padding: 24 }}
-            >
-              <button
-                type="button"
-                onClick={() => setIsCalibrationOpen(false)}
-                className="flex items-center"
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: 10,
-                  background: 'var(--color-bg-elevated)',
-                  border: '1px solid var(--color-border)',
-                  color: 'var(--color-text-primary)',
-                  cursor: 'pointer',
-                  gap: 8,
-                  fontSize: 12,
-                  fontWeight: 600,
-                }}
-              >
-                <Icon name="arrow_back" size={18} />
-                Back
-              </button>
-              <button
-                type="button"
-                onClick={toggleTheme}
-                className="flex items-center"
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: 10,
-                  background: 'var(--color-bg-elevated)',
-                  border: '1px solid var(--color-border)',
-                  color: 'var(--color-text-primary)',
-                  cursor: 'pointer',
-                  gap: 8,
-                  fontSize: 12,
-                  fontWeight: 600,
-                }}
-              >
-                <Icon name={isDark ? 'light_mode' : 'dark_mode'} size={18} />
-                {isDark ? 'Light Mode' : 'Dark Mode'}
-              </button>
-            </div>
-            <CalibrationDesktop
-              onResetSensors={() => {
-                /* hook to sensor reset if available */
-              }}
-              onConfirmAlignment={() => setIsCalibrationOpen(false)}
-            />
-            <div
-              className="flex justify-center"
-              style={{ padding: '0 32px 32px 32px' }}
-            >
-              <button
-                type="button"
-                onClick={() => setIsCalibrationOpen(false)}
-                style={{
-                  padding: '12px 24px',
-                  borderRadius: 10,
-                  background: 'var(--color-accent)',
-                  color: 'var(--color-text-inverse)',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontSize: 12,
-                  fontWeight: 700,
-                  letterSpacing: '0.10em',
-                  textTransform: 'uppercase',
-                }}
-              >
-                Close Calibration
-              </button>
-            </div>
-          </div>
         )}
 
         <AIArchitectureModal
@@ -788,6 +748,18 @@ export const App: React.FC = () => {
         {activeTab === 'ai-lab' && (
           <div className="px-4 pb-4 md:p-5">
             <AILab />
+          </div>
+        )}
+
+        {activeTab === 'calibration' && (
+          <div className="w-full h-full" style={{ padding: 16, overflowY: 'auto' }}>
+            <CalibrationDesktop
+              sensorStatus={sensorStatus}
+              headingData={state.headingData}
+              recentMotion={state.recentMotion}
+              onResetSensors={resetTracking}
+              onConfirmAlignment={() => setActiveTab('map')}
+            />
           </div>
         )}
       </main>

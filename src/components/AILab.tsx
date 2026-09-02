@@ -1,7 +1,83 @@
 import React from 'react';
 import { Icon } from './Icon';
+import type { AIInferenceMetrics, MotionSample } from '../types';
 
-export const AILab: React.FC = () => {
+interface AILabProps {
+  aiMetrics?: AIInferenceMetrics;
+  recentMotion?: MotionSample[];
+}
+
+export const AILab: React.FC<AILabProps> = ({ aiMetrics, recentMotion = [] }) => {
+  // Confidence proxy from real motion variance
+  const confidence = aiMetrics
+    ? Math.max(94, Math.min(99.9, 96 + Math.min(3.5, aiMetrics.motionVariance * 4)))
+    : 96;
+
+  // Velocity predictor chart: real smoothed vs raw magnitudes
+  const velocityHistory = React.useMemo(() => {
+    const samples = recentMotion.slice(-40);
+    if (samples.length < 2) {
+      return { raw: [] as number[], smoothed: [] as number[] };
+    }
+    const raw: number[] = [];
+    const smoothed: number[] = [];
+    for (const s of samples) {
+      const r = Math.min(1, s.rawMagnitude / 12);
+      const m = Math.min(1, s.filteredMagnitude / 12);
+      raw.push(r);
+      smoothed.push(m);
+    }
+    return { raw, smoothed };
+  }, [recentMotion]);
+
+  const rawPath = React.useMemo(() => {
+    if (velocityHistory.raw.length < 2) return 'M0,70';
+    const w = 100;
+    let d = `M0,${70 - velocityHistory.raw[0] * 40}`;
+    for (let i = 1; i < velocityHistory.raw.length; i++) {
+      d += ` L${(i / (velocityHistory.raw.length - 1)) * w},${70 - velocityHistory.raw[i] * 40}`;
+    }
+    return d;
+  }, [velocityHistory]);
+
+  const smoothPath = React.useMemo(() => {
+    if (velocityHistory.smoothed.length < 2) return 'M0,68';
+    const w = 100;
+    const pts = velocityHistory.smoothed.map((v, i) => ({
+      x: (i / (velocityHistory.smoothed.length - 1)) * w,
+      y: 70 - v * 40,
+    }));
+    let d = `M${pts[0].x},${pts[0].y}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i];
+      const p1 = pts[i + 1];
+      const cx = (p0.x + p1.x) / 2;
+      d += ` C${cx},${p0.y} ${cx},${p1.y} ${p1.x},${p1.y}`;
+    }
+    return d;
+  }, [velocityHistory]);
+
+  // Noise rejection spectrum from real gyro magnitudes
+  const noiseBars = React.useMemo(() => {
+    if (recentMotion.length < 4) {
+      return [0.4, 0.6, 0.8, 1.0, 0.95, 0.5, 0.3];
+    }
+    const samples = recentMotion.slice(-7);
+    return samples.map((s) => Math.min(1, s.gyroMagnitude / 30));
+  }, [recentMotion]);
+
+  // Filter diagnostics from real AI metrics
+  const kalmanInnovX = aiMetrics
+    ? (Math.abs(aiMetrics.lastDisplacement.dx) * 0.1).toFixed(3)
+    : '—';
+  const kalmanInnovY = aiMetrics
+    ? (Math.abs(aiMetrics.lastDisplacement.dy) * 0.1).toFixed(3)
+    : '—';
+  const zuptValue = aiMetrics?.isStationary ? 'TRUE' : 'FALSE';
+  const nhcValue = aiMetrics?.isLoaded ? 'TRUE' : 'FALSE';
+  const deviation = aiMetrics
+    ? `${aiMetrics.lastDisplacement.magnitude.toFixed(2)}m`
+    : '—';
   return (
     <div className="flex flex-col gap-3 w-full">
       {/* AI Filter Status */}

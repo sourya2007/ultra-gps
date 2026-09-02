@@ -1,21 +1,79 @@
-import React, { useEffect, useState } from 'react';
+import React, { useMemo } from 'react';
 import { Icon } from './Icon';
+import type { AIInferenceMetrics, HeadingData, MotionSample, NavigationMetrics, SensorStatus } from '../types';
 
 interface FusionHealthDesktopProps {
-  navigationMetrics?: never;
-  sensorStatus?: never;
+  sensorStatus: SensorStatus;
+  navigationMetrics: NavigationMetrics;
+  headingData: HeadingData;
+  aiMetrics: AIInferenceMetrics;
+  recentMotion: MotionSample[];
 }
 
-export const FusionHealthDesktop: React.FC<FusionHealthDesktopProps> = () => {
-  const [drift, setDrift] = useState(0.04);
-  const [confidence, setConfidence] = useState(98.2);
-  useEffect(() => {
-    const t = setInterval(() => {
-      setDrift((d) => Math.max(0.02, Math.min(0.12, d + (Math.random() - 0.5) * 0.02)));
-      setConfidence((c) => Math.max(96, Math.min(99.5, c + (Math.random() - 0.5) * 1)));
-    }, 1200);
-    return () => clearInterval(t);
-  }, []);
+export const FusionHealthDesktop: React.FC<FusionHealthDesktopProps> = ({
+  sensorStatus,
+  navigationMetrics,
+  headingData,
+  aiMetrics,
+  recentMotion,
+}) => {
+  // Drift variance from real recent motion magnitudes.
+  const drift = useMemo(() => {
+    if (recentMotion.length < 4) return 0;
+    const samples = recentMotion.slice(-30);
+    const mags = samples.map((s) => s.filteredMagnitude);
+    const mean = mags.reduce((a, b) => a + b, 0) / mags.length;
+    const variance =
+      mags.reduce((a, b) => a + (b - mean) ** 2, 0) / mags.length;
+    return Math.sqrt(variance);
+  }, [recentMotion]);
+
+  // Confidence derived from sensor freshness + heading calibration.
+  const confidence = useMemo(() => {
+    let c = 97;
+    if (sensorStatus.gpsActive) c += 1.5;
+    if (sensorStatus.hasHardwareMotion) c += 0.5;
+    if (headingData.calibrated) c += 0.5;
+    if (aiMetrics.isLoaded) c += 0.5;
+    return Math.max(94, Math.min(99.8, c - aiMetrics.motionVariance * 0.4));
+  }, [sensorStatus, headingData, aiMetrics]);
+
+  // Latency / throughput / clock derived from real AI metrics.
+  const clockLatency = `${aiMetrics.lastLatencyMs.toFixed(1)}ms`;
+  const throughput = `${(aiMetrics.totalInferences / Math.max(1, (Date.now() - (navigationMetrics.lastUpdateTimestamp || Date.now())) / 1000 + 1)).toFixed(2)} inf/s`;
+  const redundancyStatus = sensorStatus.gpsActive
+    ? 'Active'
+    : sensorStatus.hasHardwareMotion
+    ? 'Standby'
+    : 'Cold';
+  const redundancyTone: 'accent' | 'muted' = sensorStatus.gpsActive
+    ? 'accent'
+    : sensorStatus.hasHardwareMotion
+    ? 'muted'
+    : 'muted';
+
+  const sensorRows: { label: string; status: string; tone: 'accent' | 'secondary' | 'muted' }[] = [
+    {
+      label: 'GNSS',
+      status: sensorStatus.gpsActive ? 'LOCKED' : 'SEARCHING',
+      tone: sensorStatus.gpsActive ? 'accent' : 'muted',
+    },
+    {
+      label: 'IMU',
+      status: sensorStatus.hasHardwareMotion ? 'SYNCED' : 'OFFLINE',
+      tone: sensorStatus.hasHardwareMotion ? 'accent' : 'muted',
+    },
+    {
+      label: 'Wheel Tick',
+      status: sensorStatus.isSimulating ? 'SIMULATED' : aiMetrics.isStationary ? 'IDLE' : 'ACTIVE',
+      tone: aiMetrics.isStationary ? 'secondary' : 'secondary',
+    },
+    {
+      label: 'Lidar',
+      status: 'UNSUPPORTED',
+      tone: 'muted',
+    },
+  ];
 
   return (
     <div
@@ -65,11 +123,20 @@ export const FusionHealthDesktop: React.FC<FusionHealthDesktopProps> = () => {
               style={{
                 fontFamily: "'Google Sans Flex','Inter',sans-serif",
                 fontSize: 22,
-                color: 'var(--color-accent-text)',
+                color:
+                  sensorStatus.gpsActive && sensorStatus.hasHardwareMotion
+                    ? 'var(--color-accent-text)'
+                    : 'var(--color-warning-text)',
                 fontWeight: 500,
               }}
             >
-              NOMINAL
+              {sensorStatus.gpsActive && sensorStatus.hasHardwareMotion
+                ? 'NOMINAL'
+                : sensorStatus.gpsActive
+                ? 'DEGRADED'
+                : sensorStatus.hasHardwareMotion
+                ? 'INS ONLY'
+                : 'OFFLINE'}
             </span>
           </div>
           <div
@@ -78,10 +145,20 @@ export const FusionHealthDesktop: React.FC<FusionHealthDesktopProps> = () => {
               width: 48,
               height: 48,
               borderRadius: 9999,
-              background: 'var(--color-accent-soft)',
+              background: sensorStatus.gpsActive
+                ? 'var(--color-accent-soft)'
+                : 'var(--color-warning-soft)',
             }}
           >
-            <Icon name="check_circle" size={24} style={{ color: 'var(--color-accent-text)' }} />
+            <Icon
+              name={sensorStatus.gpsActive && sensorStatus.hasHardwareMotion ? 'check_circle' : 'warning'}
+              size={24}
+              style={{
+                color: sensorStatus.gpsActive
+                  ? 'var(--color-accent-text)'
+                  : 'var(--color-warning-text)',
+              }}
+            />
           </div>
         </div>
       </div>
@@ -259,10 +336,10 @@ export const FusionHealthDesktop: React.FC<FusionHealthDesktopProps> = () => {
               Sensor Status
             </span>
             <div className="flex flex-col" style={{ gap: 12 }}>
-              <SensorRow label="GNSS" status="LOCKED" tone="accent" />
-              <SensorRow label="IMU" status="SYNCED" tone="accent" />
-              <SensorRow label="Wheel Tick" status="ACTIVE" tone="secondary" />
-              <SensorRow label="Lidar" status="OFFLINE" tone="muted" />
+              <SensorRow label={sensorRows[0].label} status={sensorRows[0].status} tone={sensorRows[0].tone} />
+              <SensorRow label={sensorRows[1].label} status={sensorRows[1].status} tone={sensorRows[1].tone} />
+              <SensorRow label={sensorRows[2].label} status={sensorRows[2].status} tone={sensorRows[2].tone} />
+              <SensorRow label={sensorRows[3].label} status={sensorRows[3].status} tone={sensorRows[3].tone} />
             </div>
           </div>
         </div>
@@ -443,7 +520,7 @@ export const FusionHealthDesktop: React.FC<FusionHealthDesktopProps> = () => {
             <InterlockCard
               label="Interlock Alpha"
               title="Clock Sync"
-              value="1.2ms"
+              value={clockLatency}
               valueLabel="Latency"
               icon="sync"
               tone="accent"
@@ -451,7 +528,7 @@ export const FusionHealthDesktop: React.FC<FusionHealthDesktopProps> = () => {
             <InterlockCard
               label="Interlock Beta"
               title="Data Pipeline"
-              value="4.8 GB/s"
+              value={throughput}
               valueLabel="Throughput"
               icon="cable"
               tone="secondary"
@@ -459,10 +536,10 @@ export const FusionHealthDesktop: React.FC<FusionHealthDesktopProps> = () => {
             <InterlockCard
               label="Interlock Gamma"
               title="Redundancy"
-              value="Standby"
+              value={redundancyStatus}
               valueLabel="Status"
               icon="cloud_off"
-              tone="muted"
+              tone={redundancyTone}
             />
           </div>
         </div>

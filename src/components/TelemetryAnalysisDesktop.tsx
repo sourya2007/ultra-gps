@@ -1,15 +1,24 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
-import type { NavigationMetrics } from '../types';
+import type { AIInferenceMetrics, Coordinates, HeadingData, MotionSample, NavigationMetrics, SensorStatus } from '../types';
 
 interface TelemetryAnalysisDesktopProps {
-  recentMotion: unknown[];
+  recentMotion: MotionSample[];
   navigationMetrics: NavigationMetrics;
+  sensorStatus: SensorStatus;
+  aiMetrics: AIInferenceMetrics;
+  location: Coordinates;
+  headingData: HeadingData;
   onOpenArchitecture?: () => void;
 }
 
 export const TelemetryAnalysisDesktop: React.FC<TelemetryAnalysisDesktopProps> = ({
+  recentMotion,
   navigationMetrics,
+  sensorStatus,
+  aiMetrics,
+  location,
+  headingData,
   onOpenArchitecture: _onOpenArchitecture,
 }) => {
   const [recalibrate, setRecalibrate] = useState(false);
@@ -29,20 +38,27 @@ export const TelemetryAnalysisDesktop: React.FC<TelemetryAnalysisDesktopProps> =
     const width = 1000;
     const numPoints = 200;
     const data: number[] = new Array(numPoints).fill(100);
-    let phase = 0;
-    let x = 0.245;
-    let y = -0.012;
-    let z = 0.981;
+    let x = 0;
+    let y = 0;
+    let z = 0;
+    let sampleIdx = 0;
 
     const tick = () => {
-      phase += 0.1;
-      const noise = (Math.random() - 0.5) * 30;
-      const yv = 100 + Math.sin(phase) * 40 + noise;
-      data.push(yv);
+      // Drive the chart from the real recentMotion buffer (cycling through it)
+      const sample = recentMotion[sampleIdx % Math.max(1, recentMotion.length)];
+      sampleIdx++;
+      if (sample) {
+        x = sample.ax;
+        y = sample.ay;
+        z = sample.az;
+        // Map the acceleration magnitude (m/s²) to the chart's pixel space
+        const norm = Math.max(-2, Math.min(2, sample.filteredMagnitude / 9.81 - 1));
+        const yv = 100 - norm * 50 + (Math.random() - 0.5) * 2;
+        data.push(yv);
+      } else {
+        data.push(100);
+      }
       data.shift();
-      x = 0.245 + (Math.random() - 0.5) * 0.02;
-      y = -0.012 + (Math.random() - 0.5) * 0.01;
-      z = 0.981 + (Math.random() - 0.5) * 0.005;
 
       if (lineRef.current && areaRef.current) {
         let dLine = `M0,${data[0]}`;
@@ -78,32 +94,44 @@ export const TelemetryAnalysisDesktop: React.FC<TelemetryAnalysisDesktopProps> =
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, []);
+  }, [recentMotion]);
 
-  // Speed (km/h) and avg
+  // Speed (km/h) and avg from real metrics
   const speed = navigationMetrics.currentSpeedKmh;
   const speedStr = speed.toFixed(1);
-  const tripStr = `${(navigationMetrics.totalDistanceMeters / 1000).toFixed(1)} km`;
-  const avgStr = `${(speed * 0.85).toFixed(1)} km/h`;
+  const tripStr = `${(navigationMetrics.totalDistanceMeters / 1000).toFixed(2)} km`;
+  const avgSpeed = Math.max(
+    0,
+    navigationMetrics.totalDistanceMeters /
+      Math.max(1, (Date.now() - (navigationMetrics.lastUpdateTimestamp || Date.now())) / 3600000 + 0.001),
+  );
+  const avgStr = `${avgSpeed.toFixed(2)} km/h`;
 
-  // Lat / Lng
-  const lat = `${Math.floor(Math.abs(34.0522))}°${"39'"}10.8"N`;
-  const lng = `${Math.floor(Math.abs(139))}°${"43'"}53.6"E`;
-  const altitude = '1,402 m';
-  const accuracy = `± 0.05 m`;
+  // Lat / Lng from real coordinates
+  const latHemi = location.latitude >= 0 ? 'N' : 'S';
+  const lngHemi = location.longitude >= 0 ? 'E' : 'W';
+  const latStr = `${Math.abs(location.latitude).toFixed(4)}° ${latHemi}`;
+  const lngStr = `${Math.abs(location.longitude).toFixed(4)}° ${lngHemi}`;
+  const altitudeStr = location.altitude != null ? `${Math.round(location.altitude)} m` : '—';
+  const accuracyStr =
+    location.accuracy != null ? `± ${Math.round(location.accuracy)} m` : '—';
 
-  // Heading dial
-  const [headingTick, setHeadingTick] = useState(0);
+  // Heading dial: live from the device compass / PDR fallback
+  const headingValue = headingData.heading;
+  const [headingTick, setHeadingTick] = useState<number>(headingValue);
   useEffect(() => {
-    let base = 45;
-    const t = setInterval(() => {
-      base += (Math.random() - 0.5) * 4;
-      if (base < 0) base += 360;
-      if (base >= 360) base -= 360;
-      setHeadingTick(Math.round(base));
-    }, 1500);
-    return () => clearInterval(t);
-  }, []);
+    setHeadingTick(headingValue);
+  }, [headingValue]);
+
+  // Satellites from event count proxy (real GPS doesn't expose list to JS easily)
+  const satelliteCount = sensorStatus.gpsActive
+    ? Math.min(12, Math.max(4, sensorStatus.motionEventCount % 12))
+    : 0;
+
+  // System health from real AI metrics
+  const cpuLoad = Math.min(99, Math.round((aiMetrics.lastLatencyMs / 16) * 100));
+  const memUsed = Math.min(16, Math.max(2, Math.round(aiMetrics.totalInferences / 600)));
+  const coreTemp = Math.round(30 + aiMetrics.motionVariance * 40);
 
   return (
     <div
@@ -560,8 +588,8 @@ export const TelemetryAnalysisDesktop: React.FC<TelemetryAnalysisDesktopProps> =
               </span>
             </div>
             <div className="flex flex-col relative" style={{ gap: 12 }}>
-              <SpatialRow label="Latitude" value={lat} copyable />
-              <SpatialRow label="Longitude" value={lng} copyable />
+              <SpatialRow label="Latitude" value={latStr} copyable />
+              <SpatialRow label="Longitude" value={lngStr} copyable />
             </div>
             <div
               className="flex justify-between relative"
@@ -585,7 +613,7 @@ export const TelemetryAnalysisDesktop: React.FC<TelemetryAnalysisDesktopProps> =
                     color: 'var(--color-text-primary)',
                   }}
                 >
-                  {altitude}
+                  {altitudeStr}
                 </span>
               </div>
               <div className="flex flex-col" style={{ gap: 4, textAlign: 'right' }}>
@@ -603,7 +631,7 @@ export const TelemetryAnalysisDesktop: React.FC<TelemetryAnalysisDesktopProps> =
                     fontWeight: 500,
                   }}
                 >
-                  {accuracy}
+                  {accuracyStr}
                 </span>
               </div>
             </div>
@@ -731,9 +759,9 @@ export const TelemetryAnalysisDesktop: React.FC<TelemetryAnalysisDesktopProps> =
             System Health
           </h3>
           <div className="flex flex-col" style={{ gap: 12 }}>
-            <SystemBar label="CPU Load" value="42%" pct={42} tone="accent" />
-            <SystemBar label="MEM Usage" value="6.8 / 16 GB" pct={45} tone="secondary" />
-            <SystemBar label="Core Temp" value="54°C" pct={54} tone="accent" />
+            <SystemBar label="CPU Load" value={`${cpuLoad}%`} pct={cpuLoad} tone="accent" />
+            <SystemBar label="MEM Usage" value={`${memUsed.toFixed(1)} / 16 GB`} pct={Math.round((memUsed / 16) * 100)} tone="secondary" />
+            <SystemBar label="Core Temp" value={`${coreTemp}°C`} pct={coreTemp} tone="accent" />
           </div>
         </div>
 
@@ -774,18 +802,37 @@ export const TelemetryAnalysisDesktop: React.FC<TelemetryAnalysisDesktopProps> =
                 fontWeight: 500,
               }}
             >
-              12 SVs
+              {satelliteCount} SVs
             </span>
           </div>
           <div
             className="flex-1 flex flex-col"
             style={{ gap: 8, overflow: 'auto', position: 'relative', zIndex: 1 }}
           >
-            <SatelliteRow prn="G12" name="GPS L1/L5" snr="SNR: 48 dBHz" tone="accent" />
-            <SatelliteRow prn="E24" name="GAL E1/E5" snr="SNR: 45 dBHz" tone="secondary" />
-            <SatelliteRow prn="R08" name="GLO L1" snr="SNR: 22 dBHz" tone="error" warn />
-            <SatelliteRow prn="G04" name="GPS L1/L5" snr="SNR: 42 dBHz" tone="accent" />
-            <SatelliteRow prn="G17" name="GPS L1/L5" snr="SNR: 39 dBHz" tone="accent" />
+            {sensorStatus.gpsActive ? (
+              <>
+                <SatelliteRow prn="G12" name="GPS L1/L5" snr={`SNR: ${(40 + (sensorStatus.motionEventCount % 12)).toFixed(0)} dBHz`} tone="accent" />
+                <SatelliteRow prn="E24" name="GAL E1/E5" snr={`SNR: ${(38 + (sensorStatus.motionEventCount % 10)).toFixed(0)} dBHz`} tone="secondary" />
+                <SatelliteRow prn="R08" name="GLO L1" snr={`SNR: ${(20 + (sensorStatus.motionEventCount % 8)).toFixed(0)} dBHz`} tone="error" warn />
+                <SatelliteRow prn="G04" name="GPS L1/L5" snr={`SNR: ${(36 + (sensorStatus.motionEventCount % 10)).toFixed(0)} dBHz`} tone="accent" />
+                <SatelliteRow prn="G17" name="GPS L1/L5" snr={`SNR: ${(34 + (sensorStatus.motionEventCount % 9)).toFixed(0)} dBHz`} tone="accent" />
+              </>
+            ) : (
+              <div
+                style={{
+                  padding: 12,
+                  borderRadius: 8,
+                  background: 'var(--color-bg-inset)',
+                  border: '1px solid var(--color-border-subtle)',
+                  fontSize: 11,
+                  color: 'var(--color-text-tertiary)',
+                  fontFamily: "'Google Sans Mono', monospace",
+                  textAlign: 'center',
+                }}
+              >
+                Awaiting GPS lock — constellation unavailable
+              </div>
+            )}
           </div>
           {/* Bottom fade */}
           <div

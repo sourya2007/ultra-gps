@@ -1,43 +1,54 @@
-import React, { useEffect, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Icon } from './Icon';
 import { useTheme } from '../context/ThemeContext';
+import type { AIInferenceMetrics, MotionSample, SensorStatus } from '../types';
 
-export const FusionHealth: React.FC = () => {
+interface FusionHealthProps {
+  sensorStatus?: SensorStatus;
+  aiMetrics?: AIInferenceMetrics;
+  recentMotion?: MotionSample[];
+}
+
+export const FusionHealth: React.FC<FusionHealthProps> = ({
+  sensorStatus,
+  aiMetrics,
+  recentMotion = [],
+}) => {
   const { isDark } = useTheme();
-  const [drift, setDrift] = useState(0.14);
   const [blackout, setBlackout] = useState(false);
 
-  // Drift drifts up under blackout, settles down otherwise
-  useEffect(() => {
-    const t = setInterval(() => {
-      setDrift((d) => {
-        if (blackout) {
-          const next = d + (Math.random() * 0.05);
-          return Math.min(next, 2.5);
-        }
-        const next = d - Math.random() * 0.1;
-        return Math.max(next, 0.12);
-      });
-    }, 800);
-    return () => clearInterval(t);
-  }, [blackout]);
+  // Drift variance from real accel magnitudes
+  const drift = useMemo(() => {
+    if (recentMotion.length < 4) return 0.12;
+    const samples = recentMotion.slice(-30);
+    const mags = samples.map((s) => s.filteredMagnitude);
+    const mean = mags.reduce((a, b) => a + b, 0) / mags.length;
+    const variance = mags.reduce((a, b) => a + (b - mean) ** 2, 0) / mags.length;
+    const base = Math.sqrt(variance);
+    return blackout ? Math.min(2.5, base + 0.3) : Math.max(0.12, base);
+  }, [recentMotion, blackout]);
 
   // The circular gauge: 283 is the circumference of a circle with r=45
   const circumference = 283;
-  const gnssOffset = blackout
-    ? circumference // 0%
-    : circumference * (1 - 0.6); // 60%
-  const insOffset = blackout
-    ? circumference * (1 - 0.9) // 90%
-    : circumference * (1 - 0.3); // 30%
+  const gnssPct = blackout || !sensorStatus?.gpsActive ? 0 : 0.6;
+  const insPct = blackout ? 0.9 : sensorStatus?.hasHardwareMotion ? 0.3 : 0.6;
+  const gnssOffset = circumference * (1 - gnssPct);
+  const insOffset = circumference * (1 - insPct);
 
-  // Sparkline paths for signal vs confidence
+  // Sparkline paths from real motion variance
+  const motionStd = useMemo(() => {
+    if (recentMotion.length < 4) return 0.1;
+    const mags = recentMotion.slice(-20).map((s) => s.filteredMagnitude);
+    const mean = mags.reduce((a, b) => a + b, 0) / mags.length;
+    return Math.sqrt(mags.reduce((a, b) => a + (b - mean) ** 2, 0) / mags.length);
+  }, [recentMotion]);
+  const wobble = Math.min(20, motionStd * 30);
   const gnssPath = blackout
-    ? 'M0,20 Q10,25 20,40 T40,80 T60,95 T80,98 T100,99'
-    : 'M0,20 Q10,25 20,40 T40,80 T60,85 T80,30 T100,20';
+    ? `M0,20 Q10,25 20,40 T40,80 T60,95 T80,98 T100,99`
+    : `M0,${20 - wobble} Q10,${25 - wobble} 20,${40 - wobble} T40,${80 - wobble} T60,${85 - wobble} T80,${30 - wobble} T100,${20 - wobble}`;
   const aiPath = blackout
-    ? 'M0,80 Q10,75 20,60 T40,20 T60,15 T80,70 T100,80'
-    : 'M0,75 Q10,70 20,55 T40,25 T60,20 T80,60 T100,75';
+    ? `M0,80 Q10,75 20,60 T40,20 T60,15 T80,70 T100,80`
+    : `M0,${75 - wobble} Q10,${70 - wobble} 20,${55 - wobble} T40,${25 - wobble} T60,${20 - wobble} T80,${60 - wobble} T100,${75 - wobble}`;
 
   return (
     <div className="flex flex-col gap-3 w-full">
@@ -97,7 +108,7 @@ export const FusionHealth: React.FC = () => {
                 fontFamily: "'Google Sans Mono', monospace",
               }}
             >
-              v4.2-Active
+              {aiMetrics?.isLoaded ? `${aiMetrics.modelName.split(' ')[0]}-Active` : 'Standby'}
             </span>
           </div>
         </div>
@@ -208,7 +219,7 @@ export const FusionHealth: React.FC = () => {
                   color: 'var(--color-text-tertiary)',
                 }}
               >
-                GNSS (60%)
+                GNSS ({Math.round(gnssPct * 100)}%)
               </span>
             </div>
             <div className="flex flex-col items-center gap-1">
@@ -224,7 +235,7 @@ export const FusionHealth: React.FC = () => {
                   color: 'var(--color-text-tertiary)',
                 }}
               >
-                INS (40%)
+                INS ({Math.round(insPct * 100)}%)
               </span>
             </div>
           </div>

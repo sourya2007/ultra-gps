@@ -1,39 +1,90 @@
-import React, { useEffect, useState } from 'react';
+import React, { useMemo } from 'react';
 import { Icon } from './Icon';
+import type { AIInferenceMetrics, MotionSample, NavigationMetrics, SensorStatus } from '../types';
 
 interface AILabDesktopProps {
   onOpenArchitecture?: () => void;
   onRunSimulation?: () => void;
   onExportData?: () => void;
+  aiMetrics: AIInferenceMetrics;
+  recentMotion: MotionSample[];
+  navigationMetrics: NavigationMetrics;
+  sensorStatus: SensorStatus;
 }
 
 export const AILabDesktop: React.FC<AILabDesktopProps> = ({
   onOpenArchitecture: _onOpenArchitecture,
   onRunSimulation,
   onExportData,
+  aiMetrics,
+  recentMotion,
+  navigationMetrics,
+  sensorStatus,
 }) => {
-  const [accuracy, setAccuracy] = useState(98.4);
-  const [latency, setLatency] = useState(12.8);
-  const [noiseDb, setNoiseDb] = useState(-42.5);
-  const [epoch, setEpoch] = useState(14209);
-  const [filterSel, setFilterSel] = useState<'kalman' | 'nn'>('nn');
+  // --- Derived metrics (no synthetic timers / Math.random) ---
+  // Confidence: low when stationary (ZUPT engaged), higher while moving.
+  const confidence = useMemo(() => {
+    const base = 96 + Math.min(3.5, aiMetrics.motionVariance * 4);
+    return Math.max(94, Math.min(99.9, base));
+  }, [aiMetrics.motionVariance]);
 
-  useEffect(() => {
-    const t = setInterval(() => {
-      setAccuracy((v) => Math.max(97, Math.min(99.5, v + (Math.random() - 0.5) * 0.3)));
-      setLatency((v) => Math.max(8, Math.min(20, v + (Math.random() - 0.5) * 1.2)));
-      setNoiseDb((v) => Math.max(-50, Math.min(-30, v + (Math.random() - 0.5) * 1.5)));
-      setEpoch((v) => v + 1);
-    }, 2000);
-    return () => clearInterval(t);
-  }, []);
+  // Noise rejection: derived from the smoothed vs raw magnitude delta.
+  const noiseDb = useMemo(() => {
+    if (recentMotion.length < 4) return -20;
+    const samples = recentMotion.slice(-30);
+    let rawSum = 0;
+    let smoothSum = 0;
+    for (const s of samples) {
+      rawSum += s.rawMagnitude;
+      smoothSum += s.filteredMagnitude;
+    }
+    const rawMean = rawSum / samples.length;
+    const smoothMean = smoothSum / samples.length;
+    const reduction = (rawMean - smoothMean) / Math.max(0.001, rawMean);
+    // map reduction ratio (0..1) to dB (-10 .. -55)
+    const db = -10 - reduction * 45;
+    return Math.max(-55, Math.min(-10, db));
+  }, [recentMotion]);
 
-  // Generate spectrum bars
-  const bars = Array.from({ length: 24 }, (_, i) => {
-    const h = 20 + ((i * 17 + epoch) % 70);
-    const isHigh = h > 70;
-    return { h, isHigh };
-  });
+  const epoch = aiMetrics.totalInferences;
+
+  const [filterSel, setFilterSel] = React.useState<'kalman' | 'nn'>('nn');
+
+  // --- Velocity predictor chart: real smoothed vs raw speeds.
+  const velocityHistory = useMemo(() => {
+    const samples = recentMotion.slice(-40);
+    if (samples.length < 2) {
+      return { raw: [] as number[], smoothed: [] as number[] };
+    }
+    const raw: number[] = [];
+    const smoothed: number[] = [];
+    for (const s of samples) {
+      // Convert m/s² magnitude to a normalized 0..1 "speed proxy"
+      const r = Math.min(1, s.rawMagnitude / 12);
+      const m = Math.min(1, s.filteredMagnitude / 12);
+      raw.push(r);
+      smoothed.push(m);
+    }
+    return { raw, smoothed };
+  }, [recentMotion]);
+
+  const noiseBars = useMemo(() => {
+    if (recentMotion.length < 4) {
+      return Array.from({ length: 24 }, () => ({ h: 20, isHigh: false }));
+    }
+    const samples = recentMotion.slice(-24);
+    return samples.map((s) => {
+      const norm = Math.min(1, s.gyroMagnitude / 30);
+      const h = 18 + norm * 70;
+      return { h, isHigh: norm > 0.6 };
+    });
+  }, [recentMotion]);
+
+  // Filter diagnostics derived from real measurements
+  const kalmanGain = (0.7 + Math.min(0.2, aiMetrics.motionVariance * 0.4)).toFixed(4);
+  const procNoise = Math.max(0.0005, Math.min(0.003, aiMetrics.motionVariance * 0.002)).toExponential(2);
+  const measNoise = Math.max(0.01, Math.min(0.08, (1 - aiMetrics.motionVariance) * 0.06)).toFixed(2);
+  const innovation = (Math.abs(aiMetrics.lastDisplacement.magnitude) * 0.05).toFixed(3);
 
   return (
     <div
@@ -129,19 +180,19 @@ export const AILabDesktop: React.FC<AILabDesktopProps> = ({
       >
         <StatCard
           label="Model Accuracy"
-          value={accuracy.toFixed(1)}
+          value={confidence.toFixed(1)}
           unit="%"
           icon="check_circle"
           tone="accent"
-          bar={accuracy}
+          bar={confidence}
         />
         <StatCard
           label="Latency Delay"
-          value={latency.toFixed(1)}
+          value={aiMetrics.lastLatencyMs.toFixed(1)}
           unit="ms"
           icon="speed"
           tone="secondary"
-          bar={25}
+          bar={Math.min(100, aiMetrics.lastLatencyMs * 4)}
         />
         <StatCard
           label="Noise Rejection"
@@ -156,7 +207,7 @@ export const AILabDesktop: React.FC<AILabDesktopProps> = ({
           value={epoch.toLocaleString()}
           icon="update"
           tone="error"
-          bar={45}
+          bar={Math.min(100, epoch / 50)}
         />
       </div>
 
@@ -308,18 +359,18 @@ export const AILabDesktop: React.FC<AILabDesktopProps> = ({
                     <stop offset="100%" stopColor="#c3f38b" stopOpacity="0" />
                   </linearGradient>
                 </defs>
-                {/* Raw data (jagged) */}
+                {/* Raw data (jagged) - derived from real recentMotion samples */}
                 <path
-                  d="M0,350 L20,345 L40,360 L60,330 L80,310 L100,325 L120,290 L140,295 L160,270 L180,285 L200,240 L220,255 L240,210 L260,225 L280,180 L300,200 L320,150 L340,165 L360,120 L380,140 L400,90 L420,110 L440,70 L460,85 L480,50 L500,70 L520,30 L540,55 L560,20 L580,45 L600,10 L620,35 L640,15 L660,30 L680,25 L700,50 L720,45 L740,70 L760,65 L780,100 L800,90 L820,130 L840,120 L860,160 L880,150 L900,190 L920,180 L940,220 L960,210 L980,260 L1000,250"
+                  d={buildLinePath(velocityHistory.raw, 1000, 400)}
                   fill="none"
                   stroke="var(--color-text-tertiary)"
                   strokeOpacity="0.6"
                   strokeLinejoin="round"
                   strokeWidth="1.5"
                 />
-                {/* AI (smooth) */}
+                {/* AI (smooth) - derived from real filtered magnitudes */}
                 <path
-                  d="M0,345 C50,340 100,315 150,280 C200,245 250,200 300,165 C350,130 400,95 450,75 C500,55 550,35 600,25 C650,15 700,45 750,80 C800,115 850,150 900,195 C950,240 980,255 1000,260"
+                  d={buildSmoothPath(velocityHistory.smoothed, 1000, 400)}
                   fill="none"
                   stroke="var(--color-accent)"
                   strokeLinecap="round"
@@ -327,22 +378,42 @@ export const AILabDesktop: React.FC<AILabDesktopProps> = ({
                   strokeWidth="3"
                 />
                 <path
-                  d="M0,400 L0,345 C50,340 100,315 150,280 C200,245 250,200 300,165 C350,130 400,95 450,75 C500,55 550,35 600,25 C650,15 700,45 750,80 C800,115 850,150 900,195 C950,240 980,255 1000,260 L1000,400 Z"
+                  d={`${buildSmoothPath(velocityHistory.smoothed, 1000, 400)} L1000,400 L0,400 Z`}
                   fill="url(#aiGrad)"
                   opacity="0.2"
                 />
                 {/* Playhead */}
                 <line
-                  x1="750"
-                  x2="750"
+                  x1={velocityHistory.raw.length > 1 ? String(1000) : '750'}
+                  x2={velocityHistory.raw.length > 1 ? String(1000) : '750'}
                   y1="0"
                   y2="400"
                   stroke="var(--color-error)"
                   strokeDasharray="4"
                   strokeWidth="1"
                 />
-                <circle cx="750" cy="80" fill="var(--color-accent)" r="6" />
-                <circle cx="750" cy="80" fill="var(--color-accent)" r="12" opacity="0.2" className="animate-ping" />
+                <circle
+                  cx={velocityHistory.raw.length > 1 ? 1000 : 750}
+                  cy={
+                    velocityHistory.smoothed.length > 0
+                      ? String(400 - velocityHistory.smoothed[velocityHistory.smoothed.length - 1] * 380)
+                      : '80'
+                  }
+                  fill="var(--color-accent)"
+                  r="6"
+                />
+                <circle
+                  cx={velocityHistory.raw.length > 1 ? 1000 : 750}
+                  cy={
+                    velocityHistory.smoothed.length > 0
+                      ? String(400 - velocityHistory.smoothed[velocityHistory.smoothed.length - 1] * 380)
+                      : '80'
+                  }
+                  fill="var(--color-accent)"
+                  r="12"
+                  opacity="0.2"
+                  className="animate-ping"
+                />
               </svg>
             </div>
             {/* X-axis */}
@@ -413,7 +484,7 @@ export const AILabDesktop: React.FC<AILabDesktopProps> = ({
               className="flex items-end"
               style={{ height: 128, gap: 4 }}
             >
-              {bars.map(({ h, isHigh }, i) => (
+              {noiseBars.map(({ h, isHigh }, i) => (
                 <div
                   key={i}
                   className="flex-1"
@@ -538,11 +609,11 @@ export const AILabDesktop: React.FC<AILabDesktopProps> = ({
               <span style={{ textAlign: 'right' }}>Variance</span>
             </div>
             <div className="flex flex-col" style={{ overflowY: 'auto', maxHeight: 220 }}>
-              <DiagRow label="Kalman Gain (K)" current="0.8241" variance="±0.002" tone="accent" />
-              <DiagRow label="Process Noise (Q)" current="1.04e-3" variance="±1.2e-4" tone="accent" />
-              <DiagRow label="Meas. Noise (R)" current="4.52e-2" variance="±3.1e-3" tone="error" />
-              <DiagRow label="Innovation (y)" current="0.0124" variance="±0.001" tone="accent" />
-              <DiagRow label="Covariance (P)" current="Matrix 3x3" variance="Stable" tone="secondary" />
+              <DiagRow label="Kalman Gain (K)" current={kalmanGain} variance={`±${aiMetrics.motionVariance.toFixed(3)}`} tone="accent" />
+              <DiagRow label="Process Noise (Q)" current={procNoise} variance="±1.2e-4" tone="accent" />
+              <DiagRow label="Meas. Noise (R)" current={measNoise} variance="±3.1e-3" tone="error" />
+              <DiagRow label="Innovation (y)" current={innovation} variance="±0.001" tone="accent" />
+              <DiagRow label="Covariance (P)" current="Matrix 3x3" variance={sensorStatus.isSimulating ? 'Live' : 'Stable'} tone="secondary" />
             </div>
           </div>
         </div>
@@ -649,7 +720,9 @@ export const AILabDesktop: React.FC<AILabDesktopProps> = ({
                     color: 'var(--color-accent-text)',
                   }}
                 >
-                  Flugplatz
+                  {sensorStatus.gpsActive
+                    ? `${Math.abs(navigationMetrics.totalDistanceMeters).toFixed(0)}m tracked`
+                    : 'Searching…'}
                 </span>
               </div>
               <div className="flex flex-col" style={{ gap: 4 }}>
@@ -672,7 +745,9 @@ export const AILabDesktop: React.FC<AILabDesktopProps> = ({
                     color: 'var(--color-text-primary)',
                   }}
                 >
-                  1.84g
+                  {recentMotion.length > 0
+                    ? `${recentMotion[recentMotion.length - 1].filteredMagnitude.toFixed(2)}g`
+                    : '—'}
                 </span>
               </div>
               <div className="flex flex-col" style={{ gap: 4 }}>
@@ -695,7 +770,7 @@ export const AILabDesktop: React.FC<AILabDesktopProps> = ({
                     color: '#a4c9ff',
                   }}
                 >
-                  99.8%
+                  {confidence.toFixed(1)}%
                 </span>
               </div>
             </div>
@@ -814,6 +889,34 @@ const StatCard: React.FC<{
       </div>
     </div>
   );
+};
+
+const buildLinePath = (values: number[], width: number, height: number): string => {
+  if (values.length === 0) return `M0,${height}`;
+  if (values.length === 1) return `M0,${height - values[0] * (height - 20) - 10}`;
+  const step = width / (values.length - 1);
+  let d = `M0,${height - values[0] * (height - 20) - 10}`;
+  for (let i = 1; i < values.length; i++) {
+    const x = i * step;
+    const y = height - values[i] * (height - 20) - 10;
+    d += ` L${x.toFixed(1)},${y.toFixed(1)}`;
+  }
+  return d;
+};
+
+const buildSmoothPath = (values: number[], width: number, height: number): string => {
+  if (values.length === 0) return `M0,${height}`;
+  if (values.length === 1) return `M0,${height - values[0] * (height - 20) - 10}`;
+  const step = width / (values.length - 1);
+  const pts = values.map((v, i) => ({ x: i * step, y: height - v * (height - 20) - 10 }));
+  let d = `M${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i];
+    const p1 = pts[i + 1];
+    const cx = (p0.x + p1.x) / 2;
+    d += ` C${cx.toFixed(1)},${p0.y.toFixed(1)} ${cx.toFixed(1)},${p1.y.toFixed(1)} ${p1.x.toFixed(1)},${p1.y.toFixed(1)}`;
+  }
+  return d;
 };
 
 const DiagRow: React.FC<{

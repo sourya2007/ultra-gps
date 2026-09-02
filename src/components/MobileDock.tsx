@@ -1,7 +1,7 @@
 import React from 'react';
 import { Icon } from './Icon';
 
-export type DockTab = 'map' | 'route' | 'data' | 'fusion' | 'ai-lab' | 'stats';
+export type DockTab = 'map' | 'route' | 'data' | 'fusion' | 'ai-lab' | 'stats' | 'calibration';
 
 interface MobileDockProps {
   activeTab: DockTab;
@@ -14,6 +14,7 @@ const tabs: { key: DockTab; label: string; icon: string; hideOn?: 'lg' }[] = [
   { key: 'data', label: 'DATA', icon: 'monitoring' },
   { key: 'fusion', label: 'FUSION', icon: 'hub' },
   { key: 'ai-lab', label: 'AI LAB', icon: 'psychology' },
+  { key: 'calibration', label: 'CAL', icon: 'tune' },
   { key: 'stats', label: 'STATS', icon: 'analytics' },
 ];
 

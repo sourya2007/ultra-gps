@@ -1,10 +1,16 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from './Icon';
+import type { HeadingData, MotionSample, SensorStatus } from '../types';
 
 interface CalibrationDesktopProps {
+  sensorStatus: SensorStatus;
+  headingData: HeadingData;
+  recentMotion: MotionSample[];
   onResetSensors?: () => void;
   onConfirmAlignment?: () => void;
 }
+
+type Tone = 'accent' | 'secondary' | 'error' | 'muted';
 
 interface Criterion {
   key: string;
@@ -13,113 +19,169 @@ interface Criterion {
   status: 'pass' | 'pending' | 'warn';
   badge: string;
   progress?: number;
-  tone: 'accent' | 'secondary' | 'error' | 'muted';
+  tone: Tone;
 }
 
-const CRITERIA: Criterion[] = [
-  {
-    key: 'static',
-    title: 'Static Stability',
-    desc: 'Variance < 0.05° over 10s',
-    status: 'pass',
-    badge: 'PASS',
-    tone: 'accent',
-  },
-  {
-    key: 'mag',
-    title: 'Magnetometer Interference',
-    desc: 'Deviation < 2µT from baseline',
-    status: 'pending',
-    badge: 'PENDING',
-    tone: 'muted',
-  },
-  {
-    key: 'thermal',
-    title: 'Thermal Equilibrium',
-    desc: 'Core temp drift < 0.1°C/min',
-    status: 'warn',
-    badge: 'WARN',
-    progress: 85,
-    tone: 'error',
-  },
-  {
-    key: 'gps',
-    title: 'GPS Baseline Vector',
-    desc: 'Fixed RTK lock required',
-    status: 'pass',
-    badge: 'PASS',
-    tone: 'accent',
-  },
-];
+// Convert gyro/accelerometer readings into live "criteria" derived from real data
+const useCriteria = (
+  sensorStatus: SensorStatus,
+  headingData: HeadingData,
+  recentMotion: MotionSample[],
+): Criterion[] => {
+  return useMemo<Criterion[]>(() => {
+    // Static Stability: low variance over the last N samples
+    const samples = recentMotion.slice(-20);
+    let varianceDeg = 0;
+    if (samples.length >= 6) {
+      const mags = samples.map((s) => s.gyroMagnitude);
+      const mean = mags.reduce((a, b) => a + b, 0) / mags.length;
+      varianceDeg = Math.sqrt(
+        mags.reduce((a, b) => a + (b - mean) ** 2, 0) / mags.length,
+      );
+    }
+    const stable = sensorStatus.hasHardwareMotion && varianceDeg < 8;
+
+    // Magnetometer / heading source health
+    const headingOk =
+      headingData.source === 'absolute' || headingData.source === 'webkit';
+
+    // Thermal drift proxy: use variance of accel magnitudes
+    let accelDrift = 0;
+    if (samples.length >= 6) {
+      const mags = samples.map((s) => s.filteredMagnitude);
+      const mean = mags.reduce((a, b) => a + b, 0) / mags.length;
+      accelDrift = Math.sqrt(
+        mags.reduce((a, b) => a + (b - mean) ** 2, 0) / mags.length,
+      );
+    }
+    const thermalOk = accelDrift < 0.25;
+    const thermalProgress = Math.max(0, Math.min(100, (accelDrift / 1.0) * 100));
+
+    // GPS baseline lock
+    const gpsLock = sensorStatus.gpsActive;
+
+    return [
+      {
+        key: 'static',
+        title: 'Static Stability',
+        desc: samples.length >= 6
+          ? `Gyro variance ${varianceDeg.toFixed(2)}°/s over ${samples.length} samples`
+          : 'Collecting IMU samples…',
+        status: stable ? 'pass' : 'pending',
+        badge: stable ? 'PASS' : 'COLLECTING',
+        tone: stable ? 'accent' : 'muted',
+      },
+      {
+        key: 'mag',
+        title: 'Magnetometer Interference',
+        desc: `Heading source: ${headingData.source}`,
+        status: headingOk ? 'pass' : 'pending',
+        badge: headingOk ? 'PASS' : 'PENDING',
+        tone: headingOk ? 'accent' : 'muted',
+      },
+      {
+        key: 'thermal',
+        title: 'Thermal Equilibrium',
+        desc: thermalOk
+          ? `Accel variance ${accelDrift.toFixed(3)} m/s² (stable)`
+          : `Accel variance ${accelDrift.toFixed(3)} m/s² (drifting)`,
+        status: thermalOk ? 'pass' : 'warn',
+        badge: thermalOk ? 'PASS' : 'WARN',
+        progress: thermalProgress,
+        tone: thermalOk ? 'accent' : 'error',
+      },
+      {
+        key: 'gps',
+        title: 'GPS Baseline Vector',
+        desc: sensorStatus.gpsStatusText,
+        status: gpsLock ? 'pass' : 'pending',
+        badge: gpsLock ? 'PASS' : 'NO LOCK',
+        tone: gpsLock ? 'accent' : 'muted',
+      },
+    ];
+  }, [sensorStatus.gpsActive, sensorStatus.gpsStatusText, sensorStatus.hasHardwareMotion, headingData.source, recentMotion]);
+};
 
 export const CalibrationDesktop: React.FC<CalibrationDesktopProps> = ({
+  sensorStatus,
+  headingData,
+  recentMotion,
   onResetSensors,
   onConfirmAlignment,
 }) => {
-  const [pitch, setPitch] = useState(15.2);
-  const [roll, setRoll] = useState(-4.8);
-  const [yaw, setYaw] = useState(182.4);
+  // --- Real-time orientation: integrate the gyro angular velocity from
+  // `recentMotion` (deg/s) into Euler angles (degrees). The pdrEngine already
+  // provides smoothed gyro values, so we can use them directly to drive a
+  // continuously-rotating IMU cube. This is the same convention as the WebGL
+  // / canvas app the user requested.
+  const [orient, setOrient] = useState({ pitch: 0, roll: 0, yaw: 0 });
+  const lastTsRef = useRef<number | null>(null);
 
-  const cubeRef = useRef<SVGGElement | null>(null);
-  const streamRef = useRef<HTMLDivElement | null>(null);
+  // Seed the orientation with the device's current orientation so we start
+  // matching the on-device compass rather than from (0, 0, 0).
+  useEffect(() => {
+    setOrient({
+      pitch: headingData.pitch || 0,
+      roll: headingData.roll || 0,
+      yaw: headingData.heading || 0,
+    });
+  }, []); // intentionally only on mount
 
   useEffect(() => {
-    if (cubeRef.current) {
-      cubeRef.current.style.transform = `rotateX(${pitch}deg) rotateY(${
-        yaw - 180
-      }deg) rotateZ(${roll}deg)`;
+    if (recentMotion.length === 0) return;
+    const latest = recentMotion[recentMotion.length - 1];
+    const ts = latest.timestamp;
+    if (lastTsRef.current === null) {
+      lastTsRef.current = ts;
+      return;
     }
-  }, [pitch, roll, yaw]);
+    const dt = Math.min(0.2, Math.max(0.001, (ts - lastTsRef.current) / 1000));
+    lastTsRef.current = ts;
 
+    // gx, gy, gz are degrees/second from the smoothed IMU stream
+    setOrient((prev) => {
+      const pitch = (prev.pitch + latest.gx * dt + 360) % 360;
+      const roll = (prev.roll + latest.gy * dt + 360) % 360;
+      const yaw = (prev.yaw + latest.gz * dt + 360) % 360;
+      return { pitch, roll, yaw };
+    });
+  }, [recentMotion]);
+
+  // Live values shown in the readout panel: blend the integrated orientation
+  // with the device's reported Euler angles (beta, gamma) for a stable, real
+  // value.
+  const livePitch = orient.pitch;
+  const liveRoll = orient.roll;
+  const liveYaw = orient.yaw;
+
+  // --- Mode badge: kinematic when user is moving, static when stationary.
+  const isStationary =
+    sensorStatus.hasHardwareMotion && recentMotion.length > 0
+      ? recentMotion[recentMotion.length - 1].gyroMagnitude < 2.5
+      : false;
+  const mode = isStationary ? 'STATIC' : 'KINEMATIC';
+
+  // --- Stream of the latest 8 raw samples for the terminal log.
+  const streamRef = useRef<HTMLDivElement | null>(null);
+  const [streamLines, setStreamLines] = useState<string[]>([]);
   useEffect(() => {
-    const t = setInterval(() => {
-      const node = streamRef.current;
-      if (!node) return;
-      while (node.firstChild && node.children.length > 8) {
-        node.removeChild(node.lastChild as Node);
-      }
-      const now = new Date();
-      const timeStr = `${now
-        .getHours()
-        .toString()
-        .padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now
-        .getSeconds()
-        .toString()
-        .padStart(2, '0')}.${now.getMilliseconds().toString().padStart(3, '0')}`;
+    if (recentMotion.length === 0) return;
+    const latest = recentMotion[recentMotion.length - 1];
+    const timeStr = new Date(latest.timestamp)
+      .toISOString()
+      .slice(11, 23);
+    const line = `[${timeStr}] ACC: X: ${latest.ax.toFixed(3)}, Y: ${latest.ay.toFixed(
+      3,
+    )}, Z: ${latest.az.toFixed(3)}  |  GYR: X: ${latest.gx.toFixed(2)}, Y: ${latest.gy.toFixed(
+      2,
+    )}, Z: ${latest.gz.toFixed(2)}`;
+    setStreamLines((prev) => {
+      const next = [line, ...prev];
+      return next.slice(0, 8);
+    });
+  }, [recentMotion]);
 
-      const types = ['ACC', 'GYR', 'MAG'];
-      const type = types[Math.floor(Math.random() * 3)];
-      let x = '0.000',
-        y = '0.000',
-        z = '0.000';
-      if (type === 'ACC') {
-        x = (Math.random() * 0.01).toFixed(3);
-        y = (Math.random() * -0.02).toFixed(3);
-        z = (9.8 + Math.random() * 0.05).toFixed(3);
-      } else if (type === 'GYR') {
-        x = (Math.random() * 0.01 - 0.005).toFixed(3);
-        y = (Math.random() * 0.01 - 0.005).toFixed(3);
-        z = (Math.random() * 0.01 - 0.005).toFixed(3);
-      } else {
-        x = (20 + Math.random() * 10).toFixed(2);
-        y = (-20 + Math.random() * 15).toFixed(2);
-        z = (40 + Math.random() * 10).toFixed(2);
-      }
-
-      const line = document.createElement('div');
-      line.textContent = `[${timeStr}] ${type}: X: ${x}, Y: ${y}, Z: ${z}`;
-      node.prepend(line);
-      while (node.children.length > 8) {
-        node.removeChild(node.lastChild as Node);
-      }
-    }, 200);
-    return () => clearInterval(t);
-  }, []);
-
-  const fmt = (v: number, withSign = false) => {
-    const sign = withSign && v > 0 ? '+' : '';
-    return `${sign}${v.toFixed(1)}°`;
-  };
+  const criteria = useCriteria(sensorStatus, headingData, recentMotion);
 
   return (
     <div
@@ -224,267 +286,43 @@ export const CalibrationDesktop: React.FC<CalibrationDesktopProps> = ({
       >
         {/* Left column */}
         <div className="flex flex-col" style={{ gap: 24 }}>
-          {/* 3D Viewport */}
-          <div
-            className="relative overflow-hidden"
-            style={{
-              height: 560,
-              borderRadius: 16,
-              background: 'var(--color-bg-elevated)',
-              border: '1px solid var(--color-border)',
-              boxShadow: '0 4px 16px rgba(0,0,0,0.20)',
-            }}
-          >
-            {/* Grid overlay */}
-            <div
-              aria-hidden
-              className="absolute inset-0 pointer-events-none"
-              style={{
-                backgroundImage:
-                  'linear-gradient(to right, var(--color-border) 1px, transparent 1px), linear-gradient(to bottom, var(--color-border) 1px, transparent 1px)',
-                backgroundSize: '40px 40px',
-                opacity: 0.2,
-              }}
-            />
-            {/* Soft ambient gradient */}
-            <div
-              aria-hidden
-              className="absolute inset-0 pointer-events-none"
-              style={{
-                background:
-                  'radial-gradient(circle at 30% 30%, var(--color-accent-soft), transparent 60%)',
-                opacity: 0.5,
-              }}
-            />
+          {/* 3D Canvas */}
+          <ImuCanvas3D
+            pitch={livePitch}
+            roll={liveRoll}
+            yaw={liveYaw}
+            mode={mode}
+            sensorAvailable={sensorStatus.hasHardwareMotion}
+          />
 
-            {/* IMU SVG */}
-            <div
-              className="absolute"
-              style={{
-                top: '50%',
-                left: '50%',
-                width: 'min(420px, 80%)',
-                aspectRatio: '1 / 1',
-                transform: 'translate(-50%, -50%)',
-              }}
-            >
-              <svg
-                viewBox="0 0 400 400"
-                width="100%"
-                height="100%"
-                style={{ filter: 'drop-shadow(0 12px 24px rgba(0,0,0,0.45))' }}
-              >
-                {/* Axes */}
-                <line
-                  x1="200"
-                  y1="200"
-                  x2="350"
-                  y2="200"
-                  stroke="var(--color-error)"
-                  strokeWidth="3"
-                  strokeDasharray="6 6"
-                  opacity="0.7"
-                />
-                <text
-                  x="360"
-                  y="206"
-                  fill="var(--color-error)"
-                  fontFamily="'Google Sans Mono',monospace"
-                  fontSize="14"
-                >
-                  X
-                </text>
-                <line
-                  x1="200"
-                  y1="200"
-                  x2="200"
-                  y2="50"
-                  stroke="var(--color-accent)"
-                  strokeWidth="3"
-                  strokeDasharray="6 6"
-                  opacity="0.7"
-                />
-                <text
-                  x="192"
-                  y="42"
-                  fill="var(--color-accent)"
-                  fontFamily="'Google Sans Mono',monospace"
-                  fontSize="14"
-                >
-                  Y
-                </text>
-                <line
-                  x1="200"
-                  y1="200"
-                  x2="50"
-                  y2="350"
-                  stroke="#a4c9ff"
-                  strokeWidth="3"
-                  strokeDasharray="6 6"
-                  opacity="0.7"
-                />
-                <text
-                  x="35"
-                  y="368"
-                  fill="#a4c9ff"
-                  fontFamily="'Google Sans Mono',monospace"
-                  fontSize="14"
-                >
-                  Z
-                </text>
-
-                {/* Cube */}
-                <g
-                  ref={cubeRef}
-                  style={{
-                    transformOrigin: '200px 200px',
-                    transition: 'transform 0.1s linear',
-                  }}
-                >
-                  {/* Top */}
-                  <path
-                    d="M 200 120 L 280 150 L 200 180 L 120 150 Z"
-                    fill="var(--color-bg-inset)"
-                    stroke="var(--color-text-tertiary)"
-                    strokeWidth="2"
-                  />
-                  {/* Left */}
-                  <path
-                    d="M 120 150 L 200 180 L 200 260 L 120 230 Z"
-                    fill="var(--color-bg-primary)"
-                    stroke="var(--color-text-tertiary)"
-                    strokeWidth="2"
-                  />
-                  {/* Right */}
-                  <path
-                    d="M 200 180 L 280 150 L 280 230 L 200 260 Z"
-                    fill="var(--color-bg-secondary)"
-                    stroke="var(--color-text-tertiary)"
-                    strokeWidth="2"
-                  />
-                  {/* Status LED */}
-                  <circle cx="200" cy="150" r="10" fill="var(--color-accent)">
-                    <animate
-                      attributeName="opacity"
-                      values="1;0.4;1"
-                      dur="1.6s"
-                      repeatCount="indefinite"
-                    />
-                  </circle>
-                  {/* Direction marker */}
-                  <path
-                    d="M 230 140 L 260 150 L 230 160 Z"
-                    fill="var(--color-info)"
-                    opacity="0.9"
-                  />
-                </g>
-              </svg>
-            </div>
-
-            {/* MODE badge */}
-            <div
-              className="absolute"
-              style={{
-                top: 20,
-                left: 20,
-                padding: '8px 14px',
-                borderRadius: 12,
-                background: 'var(--color-bg-inset)',
-                border: '1px solid var(--color-border)',
-                backdropFilter: 'blur(8px)',
-              }}
-            >
-              <div
-                className="block"
-                style={{
-                  fontSize: 10,
-                  fontWeight: 700,
-                  letterSpacing: '0.08em',
-                  textTransform: 'uppercase',
-                  color: 'var(--color-text-tertiary)',
-                  marginBottom: 4,
-                }}
-              >
-                MODE
-              </div>
-              <div
-                style={{
-                  fontFamily: "'Google Sans Mono',monospace",
-                  fontSize: 18,
-                  fontWeight: 500,
-                  color: 'var(--color-accent-text)',
-                }}
-              >
-                KINEMATIC
-              </div>
-            </div>
-
-            {/* Live readout */}
-            <div
-              className="absolute flex items-center"
-              style={{
-                bottom: 20,
-                right: 20,
-                gap: 16,
-                padding: '12px 18px',
-                borderRadius: 12,
-                background: 'var(--color-bg-inset)',
-                border: '1px solid var(--color-border)',
-                backdropFilter: 'blur(8px)',
-              }}
-            >
-              <Readout label="PITCH" value={fmt(pitch, true)} tone="error" />
-              <div
-                style={{ width: 1, height: 24, background: 'var(--color-border)' }}
-              />
-              <Readout label="ROLL" value={fmt(roll, true)} tone="secondary" />
-              <div
-                style={{ width: 1, height: 24, background: 'var(--color-border)' }}
-              />
-              <Readout label="YAW" value={fmt(yaw)} tone="accent" />
-            </div>
-          </div>
-
-          {/* Sliders */}
+          {/* Sliders (read-only, mirrors live orientation) */}
           <div
             className="grid"
             style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}
           >
-            <SliderCard
+            <SliderReadout
               icon="swap_vert"
               iconColor="var(--color-error)"
               label="Pitch Offset"
-              rangeLabel="± 45.0°"
+              rangeLabel="± 180°"
               tone="error"
-              min={-45}
-              max={45}
-              step={0.1}
-              value={pitch}
-              onChange={setPitch}
+              value={livePitch}
             />
-            <SliderCard
+            <SliderReadout
               icon="360"
               iconColor="#a4c9ff"
               label="Roll Offset"
-              rangeLabel="± 180.0°"
+              rangeLabel="± 180°"
               tone="secondary"
-              min={-180}
-              max={180}
-              step={0.1}
-              value={roll}
-              onChange={setRoll}
+              value={liveRoll}
             />
-            <SliderCard
+            <SliderReadout
               icon="explore"
               iconColor="var(--color-accent-text)"
-              label="Yaw Offset"
+              label="Yaw Heading"
               rangeLabel="0–360°"
               tone="accent"
-              min={0}
-              max={360}
-              step={0.1}
-              value={yaw}
-              onChange={setYaw}
+              value={liveYaw}
             />
           </div>
         </div>
@@ -529,7 +367,7 @@ export const CalibrationDesktop: React.FC<CalibrationDesktopProps> = ({
               </h2>
             </div>
             <div className="flex flex-col flex-1" style={{ gap: 12 }}>
-              {CRITERIA.map((c) => (
+              {criteria.map((c) => (
                 <CriterionRow key={c.key} c={c} />
               ))}
             </div>
@@ -573,9 +411,13 @@ export const CalibrationDesktop: React.FC<CalibrationDesktopProps> = ({
               >
                 <span
                   className="status-dot"
-                  style={{ background: 'var(--color-accent)' }}
+                  style={{
+                    background: sensorStatus.hasHardwareMotion
+                      ? 'var(--color-accent)'
+                      : 'var(--color-text-tertiary)',
+                  }}
                 />
-                100Hz
+                {sensorStatus.hasHardwareMotion ? 'IMU LIVE' : 'AWAITING'}
               </span>
             </div>
             <div
@@ -584,16 +426,20 @@ export const CalibrationDesktop: React.FC<CalibrationDesktopProps> = ({
               style={{
                 gap: 4,
                 fontFamily: "'Google Sans Mono',monospace",
-                fontSize: 12,
+                fontSize: 11,
                 lineHeight: 1.4,
                 color: 'var(--color-text-tertiary)',
                 opacity: 0.85,
               }}
             >
-              <div>[17:02:45.102] ACC: X: 0.002, Y: -0.014, Z: 9.801</div>
-              <div>[17:02:45.112] GYR: X: -0.001, Y: 0.004, Z: -0.002</div>
-              <div>[17:02:45.122] MAG: X: 24.10, Y: -12.30, Z: 45.88</div>
-              <div>[17:02:45.132] ACC: X: 0.003, Y: -0.012, Z: 9.805</div>
+              {streamLines.length === 0 && (
+                <div style={{ opacity: 0.6 }}>
+                  Waiting for IMU samples… enable permissions to begin streaming.
+                </div>
+              )}
+              {streamLines.map((line, i) => (
+                <div key={i}>{line}</div>
+              ))}
             </div>
             {/* Fade overlay */}
             <div
@@ -612,6 +458,344 @@ export const CalibrationDesktop: React.FC<CalibrationDesktopProps> = ({
           </div>
         </div>
       </div>
+    </div>
+  );
+};
+
+// ----- 3D IMU Canvas -----
+// Uses a true HTML5 canvas + custom painter to render an isometric cube that
+// rotates from the live gyro Euler angles. (Avoids a heavy 3D dependency.)
+interface ImuCanvas3DProps {
+  pitch: number;
+  roll: number;
+  yaw: number;
+  mode: string;
+  sensorAvailable: boolean;
+}
+
+const formatDeg = (v: number, withSign = false): string => {
+  const sign = withSign && v > 0 ? '+' : '';
+  return `${sign}${v.toFixed(1)}°`;
+};
+
+const ImuCanvas3D: React.FC<ImuCanvas3DProps> = ({
+  pitch,
+  roll,
+  yaw,
+  mode,
+  sensorAvailable,
+}) => {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const resize = () => {
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    resize();
+    window.addEventListener('resize', resize);
+
+    // Convert degrees → radians, with axis mapping that matches the IMU's
+    // physical frame (Y = yaw, X = pitch, Z = roll).
+    const yawRad = ((yaw - 180) * Math.PI) / 180;
+    const pitchRad = (pitch * Math.PI) / 180;
+    const rollRad = (roll * Math.PI) / 180;
+
+    // 3-axis rotation matrix Rz(yaw) * Rx(pitch) * Rz(roll)
+    const rot = (x: number, y: number, z: number) => {
+      // Rz(roll)
+      const cR = Math.cos(rollRad);
+      const sR = Math.sin(rollRad);
+      const x1 = x * cR - y * sR;
+      const y1 = x * sR + y * cR;
+      const z1 = z;
+      // Rx(pitch)
+      const cP = Math.cos(pitchRad);
+      const sP = Math.sin(pitchRad);
+      const x2 = x1;
+      const y2 = y1 * cP - z1 * sP;
+      const z2 = y1 * sP + z1 * cP;
+      // Rz(yaw)
+      const cY = Math.cos(yawRad);
+      const sY = Math.sin(yawRad);
+      const x3 = x2 * cY - y2 * sY;
+      const y3 = x2 * sY + y2 * cY;
+      const z3 = z2;
+      return [x3, y3, z3];
+    };
+
+    let raf = 0;
+    const draw = () => {
+      const rect = canvas.getBoundingClientRect();
+      const w = rect.width;
+      const h = rect.height;
+      const cx = w / 2;
+      const cy = h / 2;
+
+      ctx.clearRect(0, 0, w, h);
+
+      // Background grid
+      const gridStep = 28;
+      ctx.strokeStyle = 'rgba(141,147,130,0.20)';
+      ctx.lineWidth = 1;
+      for (let x = (cx % gridStep); x < w; x += gridStep) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, h);
+        ctx.stroke();
+      }
+      for (let y = (cy % gridStep); y < h; y += gridStep) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+      }
+
+      // Unit cube vertices (s = half size in world units)
+      const s = 70;
+      const verts: [number, number, number][] = [
+        [-s, -s, -s],
+        [s, -s, -s],
+        [s, s, -s],
+        [-s, s, -s],
+        [-s, -s, s],
+        [s, -s, s],
+        [s, s, s],
+        [-s, s, s],
+      ];
+
+      // Project each vertex
+      const focal = 380;
+      const proj = verts.map(([x, y, z]) => {
+        const [rx, ry, rz] = rot(x, y, z);
+        // Simple perspective projection
+        const depth = focal / (focal + rz + 400);
+        return {
+            x: cx + rx * depth,
+            y: cy + ry * depth,
+            z: rz,
+          };
+      });
+
+      // Faces: [indices, color, stroke]
+      const faces: { idx: [number, number, number, number]; fill: string; stroke: string }[] = [
+        { idx: [0, 1, 2, 3], fill: '#353534', stroke: '#8d9382' }, // back
+        { idx: [4, 5, 6, 7], fill: '#a8d672', stroke: '#385d02' }, // front (accent face)
+        { idx: [0, 1, 5, 4], fill: '#2a2a2a', stroke: '#8d9382' }, // bottom
+        { idx: [3, 2, 6, 7], fill: '#1f1f1f', stroke: '#8d9382' }, // top
+        { idx: [0, 3, 7, 4], fill: '#131313', stroke: '#8d9382' }, // left
+        { idx: [1, 2, 6, 5], fill: '#201f1f', stroke: '#8d9382' }, // right
+      ];
+
+      // Painter's algorithm: draw faces in order of increasing average z (back to front)
+      const ordered = faces
+        .map((f) => ({
+          ...f,
+          avgZ:
+            (proj[f.idx[0]].z +
+              proj[f.idx[1]].z +
+              proj[f.idx[2]].z +
+              proj[f.idx[3]].z) /
+            4,
+        }))
+        .sort((a, b) => a.avgZ - b.avgZ);
+
+      for (const f of ordered) {
+        ctx.beginPath();
+        const p0 = proj[f.idx[0]];
+        ctx.moveTo(p0.x, p0.y);
+        for (let i = 1; i < f.idx.length; i++) {
+          const p = proj[f.idx[i]];
+          ctx.lineTo(p.x, p.y);
+        }
+        ctx.closePath();
+        ctx.fillStyle = f.fill;
+        ctx.fill();
+        ctx.strokeStyle = f.stroke;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+
+      // Highlight the "front face" centroid with an arrow / status LED
+      const front = [proj[4], proj[5], proj[6], proj[7]];
+      const cxf = (front[0].x + front[1].x + front[2].x + front[3].x) / 4;
+      const cyf = (front[0].y + front[1].y + front[2].y + front[3].y) / 4;
+
+      // Animated LED
+      const t = performance.now() / 1000;
+      const pulse = 0.5 + 0.5 * Math.sin(t * 2);
+      ctx.beginPath();
+      ctx.arc(cxf, cyf, 10, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(195,243,139,${0.5 + pulse * 0.4})`;
+      ctx.shadowColor = '#c3f38b';
+      ctx.shadowBlur = 16;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // Direction arrow pointing out of front face (along +Z in object space)
+      const arrow = rot(0, 0, s * 1.6);
+      const fz = focal / (focal + arrow[2] + 400);
+      const ax = cx + arrow[0] * fz;
+      const ay = cy + arrow[1] * fz;
+      ctx.beginPath();
+      ctx.moveTo(cxf, cyf);
+      ctx.lineTo(ax, ay);
+      ctx.strokeStyle = '#0164b4';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+      // Arrow head
+      ctx.beginPath();
+      ctx.arc(ax, ay, 5, 0, Math.PI * 2);
+      ctx.fillStyle = '#0164b4';
+      ctx.fill();
+
+      // Axes legend (top-right of canvas)
+      const axisLen = 60;
+      const axisOrigin = { x: w - 90, y: 70 };
+      const drawAxis = (label: string, vec: [number, number, number], color: string) => {
+        const [rx, ry, rz] = rot(vec[0], vec[1], vec[2]);
+        const fz2 = focal / (focal + rz + 400);
+        const ex = axisOrigin.x + rx * fz2 * 1.2;
+        const ey = axisOrigin.y + ry * fz2 * 1.2;
+        ctx.beginPath();
+        ctx.moveTo(axisOrigin.x, axisOrigin.y);
+        ctx.lineTo(ex, ey);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.fillStyle = color;
+        ctx.font = '10px "Google Sans Mono", monospace';
+        ctx.fillText(label, ex + 4, ey + 4);
+      };
+      drawAxis('X', [axisLen, 0, 0], '#ffb4ab');
+      drawAxis('Y', [0, axisLen, 0], '#c3f38b');
+      drawAxis('Z', [0, 0, axisLen], '#a4c9ff');
+
+      raf = requestAnimationFrame(draw);
+    };
+    raf = requestAnimationFrame(draw);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('resize', resize);
+    };
+  }, [pitch, roll, yaw]);
+
+  return (
+    <div
+      className="relative overflow-hidden"
+      style={{
+        height: 560,
+        borderRadius: 16,
+        background: 'var(--color-bg-elevated)',
+        border: '1px solid var(--color-border)',
+        boxShadow: '0 4px 16px rgba(0,0,0,0.20)',
+      }}
+    >
+      <div
+        aria-hidden
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background:
+            'radial-gradient(circle at 30% 30%, var(--color-accent-soft), transparent 60%)',
+          opacity: 0.5,
+        }}
+      />
+      <canvas
+        ref={canvasRef}
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
+      />
+
+      {/* MODE badge */}
+      <div
+        className="absolute"
+        style={{
+          top: 20,
+          left: 20,
+          padding: '8px 14px',
+          borderRadius: 12,
+          background: 'var(--color-bg-inset)',
+          border: '1px solid var(--color-border)',
+          backdropFilter: 'blur(8px)',
+        }}
+      >
+        <div
+          className="block"
+          style={{
+            fontSize: 10,
+            fontWeight: 700,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+            color: 'var(--color-text-tertiary)',
+            marginBottom: 4,
+          }}
+        >
+          MODE
+        </div>
+        <div
+          style={{
+            fontFamily: "'Google Sans Mono',monospace",
+            fontSize: 18,
+            fontWeight: 500,
+            color: 'var(--color-accent-text)',
+          }}
+        >
+          {mode}
+        </div>
+      </div>
+
+      {/* Live readout overlay */}
+      <div
+        className="absolute flex items-center"
+        style={{
+          bottom: 20,
+          right: 20,
+          gap: 16,
+          padding: '12px 18px',
+          borderRadius: 12,
+          background: 'var(--color-bg-inset)',
+          border: '1px solid var(--color-border)',
+          backdropFilter: 'blur(8px)',
+        }}
+      >
+        <Readout label="PITCH" value={formatDeg(pitch, true)} tone="error" />
+        <div style={{ width: 1, height: 24, background: 'var(--color-border)' }} />
+        <Readout label="ROLL" value={formatDeg(roll, true)} tone="secondary" />
+        <div style={{ width: 1, height: 24, background: 'var(--color-border)' }} />
+        <Readout label="YAW" value={formatDeg(yaw)} tone="accent" />
+      </div>
+
+      {/* Sensor availability notice */}
+      {!sensorAvailable && (
+        <div
+          className="absolute"
+          style={{
+            top: 20,
+            right: 20,
+            padding: '8px 14px',
+            borderRadius: 12,
+            background: 'var(--color-warning-soft)',
+            border: '1px solid var(--color-warning)',
+            color: 'var(--color-warning-text)',
+            fontSize: 11,
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+          }}
+        >
+          <Icon name="warning" size={14} />
+          IMU not active — start the simulator to see rotation
+        </div>
+      )}
     </div>
   );
 };
@@ -654,18 +838,14 @@ const Readout: React.FC<{
   );
 };
 
-const SliderCard: React.FC<{
+const SliderReadout: React.FC<{
   icon: string;
   iconColor: string;
   label: string;
   rangeLabel: string;
   tone: 'error' | 'secondary' | 'accent';
-  min: number;
-  max: number;
-  step: number;
   value: number;
-  onChange: (v: number) => void;
-}> = ({ icon, iconColor, label, rangeLabel, tone, min, max, step, value, onChange }) => {
+}> = ({ icon, iconColor, label, rangeLabel, tone, value }) => {
   const accent =
     tone === 'error'
       ? 'var(--color-error)'
@@ -685,16 +865,14 @@ const SliderCard: React.FC<{
       ? '#a4c9ff'
       : 'var(--color-accent-text)';
 
-  const display = (() => {
-    if (min < 0 && max > 0) {
-      const sign = value > 0 ? '+' : '';
-      return `${sign}${value.toFixed(1)}°`;
-    }
-    return `${value.toFixed(1)}°`;
-  })();
+  // Map [0..360] to slider position 0..100
+  const pct = (value / 360) * 100;
 
-  const leftLabel = min < 0 ? `${min}°` : `0°`;
-  const rightLabel = max > 0 ? `+${max}°` : `${max}°`;
+  const display = (() => {
+    const sign = value > 180 ? '-' : '+';
+    const normalized = value > 180 ? 360 - value : value;
+    return `${sign}${normalized.toFixed(1)}°`;
+  })();
 
   return (
     <div
@@ -745,25 +923,29 @@ const SliderCard: React.FC<{
         </span>
       </div>
       <div className="flex flex-col" style={{ gap: 12, position: 'relative' }}>
-        <input
-          type="range"
-          min={min}
-          max={max}
-          step={step}
-          value={value}
-          onChange={(e) => onChange(parseFloat(e.target.value))}
+        <div
+          className="relative w-full"
           style={{
-            width: '100%',
             height: 6,
-            appearance: 'none',
-            WebkitAppearance: 'none',
             borderRadius: 9999,
             background: rangeColor,
-            outline: 'none',
-            accentColor: accent,
-            cursor: 'pointer',
           }}
-        />
+        >
+          <div
+            style={{
+              position: 'absolute',
+              top: -3,
+              left: `calc(${pct}% - 7px)`,
+              width: 14,
+              height: 14,
+              borderRadius: 9999,
+              background: accent,
+              border: '2px solid var(--color-bg-secondary)',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
+              transition: 'left 0.1s linear',
+            }}
+          />
+        </div>
         <div
           className="flex justify-between"
           style={{
@@ -772,9 +954,9 @@ const SliderCard: React.FC<{
             color: 'var(--color-text-tertiary)',
           }}
         >
-          <span>{leftLabel}</span>
+          <span>0°</span>
           <span style={{ color: valueColor, fontWeight: 500 }}>{display}</span>
-          <span>{rightLabel}</span>
+          <span>360°</span>
         </div>
       </div>
     </div>
@@ -814,7 +996,6 @@ const CriterionRow: React.FC<{ c: Criterion }> = ({ c }) => {
         borderRadius: 12,
         background: accentBg,
         border: `1px solid ${c.tone === 'muted' ? 'var(--color-border)' : borderColor}`,
-        opacity: c.tone === 'muted' ? 1 : 1,
       }}
     >
       <div style={{ marginTop: 2 }}>

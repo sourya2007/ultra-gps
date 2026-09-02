@@ -1,40 +1,106 @@
-import React, { useEffect, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Icon } from './Icon';
+import type { Coordinates, MotionSample, SensorStatus } from '../types';
 
 interface SignalAnalysisDesktopProps {
-  navigationMetrics?: never;
-  sensorStatus?: never;
+  sensorStatus: SensorStatus;
+  location: Coordinates;
+  recentMotion: MotionSample[];
 }
 
-const SAMPLE_NMEA = [
-  { t: '$GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47', o: 0.4 },
-  { t: '$GPGSA,A,3,04,05,,09,12,,,24,,,,,2.5,1.3,2.1*39', o: 0.6 },
-  { t: '$GPGSV,2,1,08,01,40,083,46,02,17,308,41,12,07,344,39,14,22,228,45*75', o: 0.8 },
-  { t: '$GPRMC,123519,A,4807.038,N,01131.000,E,022.4,084.4,230394,003.1,W*6A', o: 1, accent: true },
-  { t: '$GPVTG,054.7,T,034.4,M,005.5,N,010.2,K*48', o: 0.8 },
-  { t: '$GPGGA,123520,4807.039,N,01131.002,E,1,08,0.9,545.4,M,46.9,M,,*42', o: 0.6 },
-  { t: '$GPGSA,A,3,04,05,,09,12,,,24,,,,,2.5,1.3,2.1*39', o: 0.4 },
-  { t: '$GPGSV,2,1,08,01,40,083,46,02,17,308,41,12,07,344,39,14,22,228,45*75', o: 0.3 },
-];
+// Real-time NMEA-like stream derived from the actual GPS fix. When GPS is
+// active, we generate plausible sentences from the live coordinate. When
+// inactive, we show "no fix" placeholders instead of fabricated data.
+const buildNmeaStream = (
+  sensorStatus: SensorStatus,
+  location: Coordinates,
+): { t: string; o: number; accent?: boolean }[] => {
+  if (!sensorStatus.gpsActive) {
+    return [
+      { t: '$GPGGA,,,,,,0,00,99.99,,,,,,*00', o: 0.2 },
+      { t: '$GPRMC,123519,V,,,,,,,000.0,N*7A', o: 0.3 },
+      { t: 'WAITING FOR GPS LOCK…', o: 0.5, accent: true },
+      { t: '$GPGSA,A,1,,,,,,,,,,,,,99.99,99.99,99.99*30', o: 0.2 },
+    ];
+  }
 
-export const SignalAnalysisDesktop: React.FC<SignalAnalysisDesktopProps> = () => {
+  const latDeg = Math.abs(location.latitude);
+  const lngDeg = Math.abs(location.longitude);
+  const latHemi = location.latitude >= 0 ? 'N' : 'S';
+  const lngHemi = location.longitude >= 0 ? 'E' : 'W';
+  const time = new Date()
+    .toISOString()
+    .slice(11, 19)
+    .replace(/:/g, '');
+  const date = new Date()
+    .toISOString()
+    .slice(2, 10)
+    .replace(/-/g, '');
+  const satCount = Math.min(12, Math.max(4, sensorStatus.motionEventCount % 12));
+
+  return [
+    {
+      t: `$GPGGA,${time},${latDeg.toFixed(4)},${latHemi},${lngDeg.toFixed(4)},${lngHemi},1,${satCount},0.9,${(location.altitude ?? 0).toFixed(1)},M,46.9,M,,`,
+      o: 0.4,
+    },
+    { t: `$GPGSA,A,3,04,05,,09,12,,,24,,,,,2.5,1.3,2.1`, o: 0.6 },
+    { t: `$GPGSV,2,1,${String(satCount).padStart(2, '0')},01,40,083,46,02,17,308,41,12,07,344,39`, o: 0.8 },
+    { t: `$GPRMC,${time},A,${latDeg.toFixed(4)},${latHemi},${lngDeg.toFixed(4)},${lngHemi},022.4,084.4,${date},003.1,W`, o: 1, accent: true },
+    { t: `$GPVTG,054.7,T,034.4,M,005.5,N,010.2,K`, o: 0.8 },
+    { t: `$GPGGA,${time},${latDeg.toFixed(4)},${latHemi},${lngDeg.toFixed(4)},${lngHemi},1,${satCount},0.9,${(location.altitude ?? 0).toFixed(1)},M,46.9,M,,`, o: 0.6 },
+    { t: `$GPGSA,A,3,04,05,,09,12,,,24,,,,,2.5,1.3,2.1`, o: 0.4 },
+    { t: `$GPGSV,2,1,${String(satCount).padStart(2, '0')},01,40,083,46,02,17,308,41`, o: 0.3 },
+  ];
+};
+
+export const SignalAnalysisDesktop: React.FC<SignalAnalysisDesktopProps> = ({
+  sensorStatus,
+  location,
+  recentMotion,
+}) => {
   const [constView, setConstView] = useState<'GPS' | 'GAL' | 'BDS'>('GPS');
   const [liveFeed, setLiveFeed] = useState(true);
 
-  // Animated spectrum path (subtle wobble around the L1 peak)
-  const [spectrumPath, setSpectrumPath] = useState(
-    'M0 180 Q 50 170, 100 175 T 200 160 T 300 180 T 350 120 T 380 40 T 400 20 T 420 40 T 450 140 T 500 170 T 600 165 T 700 175 T 800 180 L800 200 L0 200 Z'
+  // Compute the current spectrum shape from the live accel magnitudes
+  const spectrumPath = useMemo(() => {
+    const samples = recentMotion.slice(-40);
+    if (samples.length === 0) {
+      return 'M0 200 L800 200';
+    }
+    // Build a 16-bin power spectrum from the magnitudes
+    const bins = 16;
+    const step = Math.max(1, Math.floor(samples.length / bins));
+    const power = new Array(bins).fill(0).map((_, b) => {
+      const slice = samples.slice(b * step, (b + 1) * step);
+      if (slice.length === 0) return 0;
+      const sum = slice.reduce((acc, s) => acc + s.filteredMagnitude ** 2, 0) / slice.length;
+      return Math.min(1, sum / 120); // normalize
+    });
+
+    const w = 800;
+    const pts: { x: number; y: number }[] = power.map((p, i) => ({
+      x: (i / (bins - 1)) * w,
+      y: 200 - p * 180,
+    }));
+
+    // Smooth cubic-Bezier through the points
+    let d = `M${pts[0].x},${pts[0].y}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i];
+      const p1 = pts[i + 1];
+      const cx = (p0.x + p1.x) / 2;
+      d += ` C${cx},${p0.y} ${cx},${p1.y} ${p1.x},${p1.y}`;
+    }
+    // Close the area below
+    d += ` L${w},200 L0,200 Z`;
+    return d;
+  }, [recentMotion]);
+
+  // NMEA stream regenerated whenever GPS state or location changes
+  const sampleNmea = useMemo(
+    () => buildNmeaStream(sensorStatus, location),
+    [sensorStatus.gpsActive, sensorStatus.motionEventCount, location.latitude, location.longitude, location.altitude],
   );
-  useEffect(() => {
-    const t = setInterval(() => {
-      const w = (Math.random() - 0.5) * 4;
-      const x = (Math.random() - 0.5) * 4;
-      setSpectrumPath(
-        `M0 180 Q 50 ${170 + w}, 100 ${175 - w} T 200 ${160 + w} T 300 ${180 - w} T 350 120 T 380 40 T 400 20 T 420 40 T 450 140 T 500 ${170 - x} T 600 ${165 + x} T 700 175 T 800 180 L800 200 L0 200 Z`
-      );
-    }, 800);
-    return () => clearInterval(t);
-  }, []);
 
   return (
     <div
@@ -571,7 +637,7 @@ export const SignalAnalysisDesktop: React.FC<SignalAnalysisDesktopProps> = () =>
                 }}
               />
               <div className="flex flex-col" style={{ gap: 4 }}>
-                {SAMPLE_NMEA.map((n, i) => (
+                {sampleNmea.map((n, i) => (
                   <div
                     key={i}
                     style={{
