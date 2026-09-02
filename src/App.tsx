@@ -24,6 +24,7 @@ import { RoutePlanningDesktop } from './components/RoutePlanningDesktop';
 import { FusionHealthDesktop } from './components/FusionHealthDesktop';
 import { AILabDesktop } from './components/AILabDesktop';
 import { SettingsDesktop } from './components/SettingsDesktop';
+import { CalibrationDesktop } from './components/CalibrationDesktop';
 import { useTheme } from './context/ThemeContext';
 import { calculateWaypointInfo } from './utils/geodesy';
 import type {
@@ -39,7 +40,7 @@ import type {
 import type { AIInferenceMetrics } from './types';
 
 // Map the dock tab (mobile) to the sidebar key (desktop).
-type SidebarKey = 'map' | 'route' | 'telemetry' | 'analysis' | 'fusion' | 'ai-lab' | 'settings';
+type SidebarKey = 'map' | 'route' | 'telemetry' | 'analysis' | 'fusion' | 'ai-lab' | 'calibration' | 'settings';
 
 const DOCK_TO_SIDEBAR: Record<DockTab, SidebarKey> = {
   map: 'map',
@@ -56,6 +57,7 @@ const SIDEBAR_TO_DOCK: Record<SidebarKey, DockTab> = {
   analysis: 'stats',
   fusion: 'fusion',
   'ai-lab': 'ai-lab',
+  calibration: 'ai-lab', // calibration lives in sidebar on desktop; on mobile it opens the desktop overlay
   settings: 'map', // settings opens a panel (not a dock tab) on mobile
 };
 
@@ -176,6 +178,7 @@ export const App: React.FC = () => {
 
   const [isArchitectureOpen, setIsArchitectureOpen] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [isCalibrationOpen, setIsCalibrationOpen] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<DockTab>('map');
   const [mapLayer, setMapLayer] = useState<MapLayerType>('satellite');
   const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
@@ -233,6 +236,10 @@ export const App: React.FC = () => {
   const handleSidebarSelect = (key: SidebarKey) => {
     if (key === 'settings') {
       setIsSettingsOpen(true);
+      return;
+    }
+    if (key === 'calibration') {
+      setIsCalibrationOpen(true);
       return;
     }
     setActiveTab(SIDEBAR_TO_DOCK[key]);
@@ -544,6 +551,87 @@ export const App: React.FC = () => {
             onChangeMapLayer={setMapLayer}
             isAccelDrifting={isAccelDrifting}
           />
+        )}
+
+        {/* Calibration overlay — fullscreen on desktop & tablet */}
+        {isCalibrationOpen && isDesktopOrTablet && (
+          <div
+            className="fixed inset-0 z-[1100] overflow-auto"
+            style={{ background: 'var(--color-bg-primary)' }}
+          >
+            <div
+              className="flex items-center justify-between"
+              style={{ padding: 24 }}
+            >
+              <button
+                type="button"
+                onClick={() => setIsCalibrationOpen(false)}
+                className="flex items-center"
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: 10,
+                  background: 'var(--color-bg-elevated)',
+                  border: '1px solid var(--color-border)',
+                  color: 'var(--color-text-primary)',
+                  cursor: 'pointer',
+                  gap: 8,
+                  fontSize: 12,
+                  fontWeight: 600,
+                }}
+              >
+                <Icon name="arrow_back" size={18} />
+                Back
+              </button>
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="flex items-center"
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: 10,
+                  background: 'var(--color-bg-elevated)',
+                  border: '1px solid var(--color-border)',
+                  color: 'var(--color-text-primary)',
+                  cursor: 'pointer',
+                  gap: 8,
+                  fontSize: 12,
+                  fontWeight: 600,
+                }}
+              >
+                <Icon name={isDark ? 'light_mode' : 'dark_mode'} size={18} />
+                {isDark ? 'Light Mode' : 'Dark Mode'}
+              </button>
+            </div>
+            <CalibrationDesktop
+              onResetSensors={() => {
+                /* hook to sensor reset if available */
+              }}
+              onConfirmAlignment={() => setIsCalibrationOpen(false)}
+            />
+            <div
+              className="flex justify-center"
+              style={{ padding: '0 32px 32px 32px' }}
+            >
+              <button
+                type="button"
+                onClick={() => setIsCalibrationOpen(false)}
+                style={{
+                  padding: '12px 24px',
+                  borderRadius: 10,
+                  background: 'var(--color-accent)',
+                  color: 'var(--color-text-inverse)',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  letterSpacing: '0.10em',
+                  textTransform: 'uppercase',
+                }}
+              >
+                Close Calibration
+              </button>
+            </div>
+          </div>
         )}
 
         <AIArchitectureModal

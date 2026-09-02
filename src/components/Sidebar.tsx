@@ -1,7 +1,7 @@
 import React from 'react';
 import { Icon } from './Icon';
 
-export type SidebarKey = 'map' | 'route' | 'telemetry' | 'analysis' | 'fusion' | 'ai-lab' | 'settings';
+export type SidebarKey = 'map' | 'route' | 'telemetry' | 'analysis' | 'fusion' | 'ai-lab' | 'calibration' | 'settings';
 
 interface SidebarProps {
   activeKey: SidebarKey;
@@ -15,6 +15,7 @@ const NAV: { key: SidebarKey; label: string; icon: string }[] = [
   { key: 'analysis', label: 'Analysis', icon: 'query_stats' },
   { key: 'fusion', label: 'Fusion', icon: 'hub' },
   { key: 'ai-lab', label: 'AI Lab', icon: 'psychology' },
+  { key: 'calibration', label: 'Calibration', icon: 'tune' },
   { key: 'settings', label: 'Settings', icon: 'settings' },
 ];
 
