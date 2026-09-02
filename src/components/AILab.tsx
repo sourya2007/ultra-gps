@@ -8,7 +8,7 @@ interface AILabProps {
 }
 
 export const AILab: React.FC<AILabProps> = ({ aiMetrics, recentMotion = [] }) => {
-  // Confidence proxy from real motion variance
+  // Confidence proxy from real motion variance (used to color the "High-Freq Blocked" tag)
   const confidence = aiMetrics
     ? Math.max(94, Math.min(99.9, 96 + Math.min(3.5, aiMetrics.motionVariance * 4)))
     : 96;
@@ -74,7 +74,6 @@ export const AILab: React.FC<AILabProps> = ({ aiMetrics, recentMotion = [] }) =>
     ? (Math.abs(aiMetrics.lastDisplacement.dy) * 0.1).toFixed(3)
     : '—';
   const zuptValue = aiMetrics?.isStationary ? 'TRUE' : 'FALSE';
-  const nhcValue = aiMetrics?.isLoaded ? 'TRUE' : 'FALSE';
   const deviation = aiMetrics
     ? `${aiMetrics.lastDisplacement.magnitude.toFixed(2)}m`
     : '—';
@@ -121,7 +120,7 @@ export const AILab: React.FC<AILabProps> = ({ aiMetrics, recentMotion = [] }) =>
               fontFamily: "'Google Sans Mono', monospace",
             }}
           >
-            v4.2-Active
+            {aiMetrics?.isLoaded ? `${aiMetrics.modelName.split(' ')[0]}-Active` : 'Standby'}
           </span>
         </div>
       </div>
@@ -215,7 +214,7 @@ export const AILab: React.FC<AILabProps> = ({ aiMetrics, recentMotion = [] }) =>
           >
             {/* Raw IMU noisy line */}
             <path
-              d="M0,70 L5,65 L10,75 L15,60 L20,72 L25,55 L30,68 L35,50 L40,65 L45,45 L50,60 L55,40 L60,55 L65,35 L70,50 L75,30 L80,45 L85,25 L90,40 L95,20 L100,35"
+              d={rawPath}
               fill="none"
               stroke="#e5e2e1"
               strokeOpacity="0.6"
@@ -224,7 +223,7 @@ export const AILab: React.FC<AILabProps> = ({ aiMetrics, recentMotion = [] }) =>
             />
             {/* AI filtered smooth curve */}
             <path
-              d="M0,68 C 10,68 20,60 30,58 C 40,56 50,48 60,45 C 70,42 80,35 90,32 C 95,30 100,28 100,28"
+              d={smoothPath}
               fill="none"
               stroke="var(--color-accent)"
               strokeWidth="2"
@@ -289,19 +288,14 @@ export const AILab: React.FC<AILabProps> = ({ aiMetrics, recentMotion = [] }) =>
             </div>
           </div>
           <div className="flex items-end gap-1 flex-1">
-            {[0.4, 0.6, 0.8, 1.0, 0.95, 0.5, 0.3].map((h, i) => (
+            {noiseBars.map((h, i) => (
               <div
                 key={i}
                 style={{
                   flex: 1,
                   height: `${h * 100}%`,
                   borderRadius: '2px 2px 0 0',
-                  background:
-                    h >= 0.7
-                      ? 'var(--color-accent)'
-                      : h >= 0.4
-                      ? 'var(--color-accent)'
-                      : 'var(--color-accent)',
+                  background: 'var(--color-accent)',
                   opacity: h >= 0.7 ? 0.85 : h >= 0.4 ? 0.5 : 0.30,
                   boxShadow:
                     h >= 0.85
@@ -319,7 +313,7 @@ export const AILab: React.FC<AILabProps> = ({ aiMetrics, recentMotion = [] }) =>
               fontFamily: "'Google Sans Mono', monospace",
             }}
           >
-            High-Freq Blocked
+Confidence: {confidence.toFixed(1)}%
           </div>
         </div>
 
@@ -435,7 +429,7 @@ export const AILab: React.FC<AILabProps> = ({ aiMetrics, recentMotion = [] }) =>
               fontFamily: "'Google Sans Mono', monospace",
             }}
           >
-            Dev: 1.2m
+            Dev: {deviation}
           </div>
         </div>
       </div>
@@ -467,10 +461,10 @@ export const AILab: React.FC<AILabProps> = ({ aiMetrics, recentMotion = [] }) =>
             Filter Diagnostics
           </span>
         </div>
-        <DataRow label="Kalman Innov X" value="0.023" tone="accent" />
-        <DataRow label="Kalman Innov Y" value="0.018" tone="accent" />
-        <DataRow label="Zero-Vel Update" value="FALSE" tone="text" />
-        <DataRow label="NHC Active" value="TRUE" tone="accent" />
+        <DataRow label="Kalman Innov X" value={kalmanInnovX} tone="accent" />
+        <DataRow label="Kalman Innov Y" value={kalmanInnovY} tone="accent" />
+        <DataRow label="Zero-Vel Update" value={zuptValue} tone="text" />
+        <DataRow label="NHC Active" value={aiMetrics?.isLoaded ? 'TRUE' : 'FALSE'} tone="accent" />
       </div>
 
       {/* Retrain model button */}

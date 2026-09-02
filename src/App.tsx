@@ -741,13 +741,17 @@ export const App: React.FC = () => {
 
         {activeTab === 'fusion' && (
           <div className="px-4 pb-4 md:p-5">
-            <FusionHealth />
+            <FusionHealth
+              sensorStatus={sensorStatus}
+              aiMetrics={aiMetrics}
+              recentMotion={state.recentMotion}
+            />
           </div>
         )}
 
         {activeTab === 'ai-lab' && (
           <div className="px-4 pb-4 md:p-5">
-            <AILab />
+            <AILab aiMetrics={aiMetrics} recentMotion={state.recentMotion} />
           </div>
         )}
 
