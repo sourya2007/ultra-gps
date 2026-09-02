@@ -66,7 +66,10 @@ export const CompassDial: React.FC<CompassDialProps> = ({
   const smoothedDeviceRef = useRef<number>(device.heading);
   useEffect(() => {
     if (!device.available) return;
-    smoothedDeviceRef.current = ema(smoothedDeviceRef.current, device.heading, 0.15);
+    let delta = device.heading - smoothedDeviceRef.current;
+    while (delta > 180) delta -= 360;
+    while (delta < -180) delta += 360;
+    smoothedDeviceRef.current = smoothedDeviceRef.current + delta * 0.15;
   }, [device.heading, device.available]);
 
   // Use the device heading (smoothed) as the primary source. Only when the
