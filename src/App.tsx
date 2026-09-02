@@ -11,6 +11,9 @@ import { MobileDock, type DockTab } from './components/MobileDock';
 import { CompassDial } from './components/CompassDial';
 import { DockAnalysisPanel } from './components/DockAnalysisPanel';
 import { SettingsPanel } from './components/SettingsPanel';
+import { RoutePlanning } from './components/RoutePlanning';
+import { FusionHealth } from './components/FusionHealth';
+import { AILab } from './components/AILab';
 import type {
   Coordinates,
   HeadingData,
@@ -24,8 +27,11 @@ import type { AIInferenceMetrics } from './types';
 
 const PAGE_TITLE: Record<DockTab, string> = {
   map: 'Map',
-  telemetry: 'Telemetry',
-  analysis: 'Analysis',
+  route: 'Route',
+  data: 'Data',
+  fusion: 'Fusion',
+  'ai-lab': 'AI Lab',
+  stats: 'Stats',
 };
 
 const DOCK_HEIGHT = 64;
@@ -152,14 +158,14 @@ export const App: React.FC = () => {
   }, []);
 
   // Derived: the slide-up analysis panel is open when the user has selected the
-  // ANALYSIS tab *and* we're on a desktop-class viewport.
-  const isAnalysisPanelOpen = activeTab === 'analysis' && isDesktopViewport;
+  // STATS tab *and* we're on a desktop-class viewport.
+  const isAnalysisPanelOpen = activeTab === 'stats' && isDesktopViewport;
 
-  // Handle dock tab changes — on desktop, ANALYSIS toggles the panel;
+  // Handle dock tab changes — on desktop, STATS toggles the panel;
   // on mobile/tablet it switches pages (page-mode is handled in the render below).
   const handleDockTabChange = (tab: DockTab) => {
-    if (tab === 'analysis' && isDesktopViewport) {
-      setActiveTab((prev) => (prev === 'analysis' ? 'map' : 'analysis'));
+    if (tab === 'stats' && isDesktopViewport) {
+      setActiveTab((prev) => (prev === 'stats' ? 'map' : 'stats'));
       return;
     }
     setActiveTab(tab);
@@ -274,10 +280,10 @@ export const App: React.FC = () => {
           </div>
         )}
 
-        {/* TELEMETRY page — mobile + tablet only (TELEMETRY dock tab is hidden on lg+).
+        {/* DATA page (formerly TELEMETRY) — mobile + tablet only.
             Shows the map + compass dial + IMU signal analysis. Telemetry bento
             (COORDS/SPEED/HEADING/DISTANCE) lives on the MAP page only. */}
-        {activeTab === 'telemetry' && (
+        {activeTab === 'data' && (
           <div
             className="flex flex-col gap-3 px-4 pb-4
                        md:grid md:grid-cols-[minmax(0,1fr)_380px] md:gap-4 md:p-5
@@ -326,10 +332,10 @@ export const App: React.FC = () => {
           </div>
         )}
 
-        {/* ANALYSIS page — only on mobile/tablet; desktop opens the dock panel instead.
-            IMU signal analysis lives on the TELEMETRY view, so this page just
+        {/* STATS page (formerly ANALYSIS) — only on mobile/tablet; desktop opens the dock panel instead.
+            IMU signal analysis lives on the DATA view, so this page just
             shows the AI model status + simulator controls. */}
-        {activeTab === 'analysis' && !isDesktopViewport && (
+        {activeTab === 'stats' && !isDesktopViewport && (
           <div
             className="flex flex-col gap-3 px-4 pb-4
                        md:h-full md:overflow-hidden"
@@ -350,6 +356,27 @@ export const App: React.FC = () => {
                 onResetTracking={resetTracking}
               />
             </div>
+          </div>
+        )}
+
+        {/* ROUTE page — Route planning UI */}
+        {activeTab === 'route' && (
+          <div className="px-4 pb-4 md:p-5">
+            <RoutePlanning />
+          </div>
+        )}
+
+        {/* FUSION page — Fusion engine health */}
+        {activeTab === 'fusion' && (
+          <div className="px-4 pb-4 md:p-5">
+            <FusionHealth />
+          </div>
+        )}
+
+        {/* AI LAB page — AI filter diagnostics */}
+        {activeTab === 'ai-lab' && (
+          <div className="px-4 pb-4 md:p-5">
+            <AILab />
           </div>
         )}
       </main>
