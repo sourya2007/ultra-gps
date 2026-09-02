@@ -36,14 +36,6 @@ const cardinalFromHeading = (h: number): string => {
 const supportsVibrate = (): boolean =>
   typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function';
 
-/**
- * Exponential moving average helper for smoothing a noisy signal.
- * alpha = 0  →  no smoothing (pass-through)
- * alpha = 1  →  freeze the value
- */
-const ema = (prev: number, next: number, alpha: number): number =>
-  prev * (1 - alpha) + next * alpha;
-
 export const CompassDial: React.FC<CompassDialProps> = ({
   navigationMetrics,
   sensorStatus,
@@ -60,9 +52,9 @@ export const CompassDial: React.FC<CompassDialProps> = ({
   // --- Read the on-device compass directly (independent of GPS) ---
   const device = useDeviceHeading();
 
-  // --- Smooth the device heading with an EMA to kill magnetometer jitter ---
-  // alpha = 0.15 means it takes ~6 samples (~120ms at 50Hz) to converge,
-  // which removes per-frame glitchiness without introducing visible lag.
+  // --- Smooth the device heading to kill magnetometer jitter ---
+  // Uses shortest-path angular blending (alpha = 0.15) so wraparound at
+  // 359°→0° doesn't glitch.
   const smoothedDeviceRef = useRef<number>(device.heading);
   useEffect(() => {
     if (!device.available) return;
