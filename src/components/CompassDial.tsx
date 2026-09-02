@@ -84,20 +84,19 @@ export const CompassDial: React.FC<CompassDialProps> = ({
   const source = device.available ? device.source : fallbackSource;
 
   // --- Smooth heading with wraparound handling ---
-  // Continuous value is the rotation that's monotonic (so the visual dial
-  // doesn't snap at 359→0). This is only used for the *display* — the bezel
-  // itself is now static, but we still keep a small animated needle OR
-  // (matching the reference) just use a static needle and show the heading
-  // in the center display. We use the smoothed value directly.
-  const [displayHeading, setDisplayHeading] = useState<number>(liveHeading);
+  // `continuous` is the monotonic (unbounded) rotation that lets the visual
+  // dial cross 359°→0° smoothly without snapping. All of the bezel rotation
+  // derives from this value.
+  const continuousRef = useRef<number>(liveHeading);
   const targetRef = useRef<number>(liveHeading);
   const lastHapticCardinalRef = useRef<number>(-1);
   const rafRef = useRef<number | null>(null);
   const [, force] = useState(0);
 
   useEffect(() => {
-    // Find shortest path from current display to live target
-    const prev = displayHeading;
+    // Find shortest path from current continuous to the new live target so
+    // 359°→0° takes the +1 path rather than the −359 path.
+    const prev = continuousRef.current;
     let delta = liveHeading - prev;
     while (delta > 180) delta -= 360;
     while (delta < -180) delta += 360;
@@ -109,18 +108,13 @@ export const CompassDial: React.FC<CompassDialProps> = ({
     const tick = (now: number) => {
       const dt = Math.min(0.1, (now - prev) / 1000);
       prev = now;
-      const prevDisp = displayHeading;
+      const prevCont = continuousRef.current;
       const target = targetRef.current;
-      // Faster follow so the center number updates immediately with device motion
-      const k = 1 - Math.exp(-dt / 0.08);
-      const next = prevDisp + (target - prevDisp) * k;
-      const settled = Math.abs(target - next) < 0.005 ? target : next;
-      const wrapped = ((settled % 360) + 360) % 360;
-      if (wrapped !== displayHeading) {
-        setDisplayHeading(wrapped);
-      } else {
-        force((n) => (n + 1) % 1_000_000);
-      }
+      // Critically-damped follow with ~150ms time constant
+      const k = 1 - Math.exp(-dt / 0.15);
+      const next = prevCont + (target - prevCont) * k;
+      continuousRef.current = Math.abs(target - next) < 0.0005 ? target : next;
+      force((n) => (n + 1) % 1_000_000);
       rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
@@ -129,9 +123,11 @@ export const CompassDial: React.FC<CompassDialProps> = ({
     };
   }, []);
 
+  const continuous = continuousRef.current;
+  const displayHeading = ((continuous % 360) + 360) % 360;
   const activeCardinal = cardinalFromHeading(displayHeading);
 
-  // --- Haptic feedback at each cardinal direction (within ±2deg) ---
+  // --- Haptic feedback at each PERFECT cardinal direction (within ±0.5deg) ---
   useEffect(() => {
     const h = displayHeading;
     let nearest = -1;
@@ -144,7 +140,10 @@ export const CompassDial: React.FC<CompassDialProps> = ({
         nearest = c.deg;
       }
     }
-    if (minDist <= 2 && lastHapticCardinalRef.current !== nearest) {
+    // Fire haptic only when the live heading is within 0.5deg of a perfect
+    // cardinal. Re-arms once the user moves more than 3deg away so it fires
+    // exactly once per cardinal crossing.
+    if (minDist <= 0.5 && lastHapticCardinalRef.current !== nearest) {
       lastHapticCardinalRef.current = nearest;
       if (supportsVibrate()) {
         try {
@@ -153,7 +152,7 @@ export const CompassDial: React.FC<CompassDialProps> = ({
           /* ignore */
         }
       }
-    } else if (minDist > 5) {
+    } else if (minDist > 3) {
       lastHapticCardinalRef.current = -1;
     }
   }, [displayHeading]);
@@ -248,10 +247,10 @@ export const CompassDial: React.FC<CompassDialProps> = ({
   const needleBaseHalf = 6;
   const needleGap = centerCircleRadius + 4;
 
-  // For each number on the outer ring, compute the position + a local rotation
-  // so the digit's "up" axis points radially outward (perpendicular to the
-  // radial tick mark at that position). The numbers do NOT rotate with the
-  // dial — they are static in the world frame, anchored to their world angle.
+  // For each number on the outer ring, compute the position relative to the
+  // dial center. The number's local rotation is computed inline (counter-
+  // rotation by `continuous`) so the digit stays upright in the world frame
+  // as the bezel rotates.
   const numberR = rNumber;
   const numberElements = ticks
     .filter((t) => t.number !== undefined)
@@ -259,8 +258,7 @@ export const CompassDial: React.FC<CompassDialProps> = ({
       const angle = (deg - 90) * (Math.PI / 180);
       const x = cx + numberR * Math.cos(angle);
       const y = cy + numberR * Math.sin(angle);
-      // Local rotation so the digit's "up" points radially outward
-      return { deg, number, x, y, rotation: deg };
+      return { deg, number, x, y };
     });
 
   const sourceLabel = (() => {
@@ -348,79 +346,93 @@ export const CompassDial: React.FC<CompassDialProps> = ({
             strokeWidth={1}
           />
 
-          {/* STATIC ticks — bezel does not rotate */}
-          {ticks.map(({ deg, major, minor }) => {
-            const angle = (deg - 90) * (Math.PI / 180);
-            const r1 = rOuter - 1;
-            const r2 = major ? rTickMajor : minor ? rTickMinor : rTickMicro;
-            const x1 = cx + r1 * Math.cos(angle);
-            const y1 = cy + r1 * Math.sin(angle);
-            const x2 = cx + r2 * Math.cos(angle);
-            const y2 = cy + r2 * Math.sin(angle);
-            return (
-              <line
-                key={`tick-${deg}`}
-                x1={x1}
-                y1={y1}
-                x2={x2}
-                y2={y2}
-                stroke={
-                  major ? palette.tickMajor : minor ? palette.tickMinor : palette.tickMicro
-                }
-                strokeWidth={major ? 1.5 : minor ? 1 : 0.6}
-                strokeLinecap="round"
-              />
-            );
-          })}
+          {/* ROTATING bezel: ticks + cardinals + degree numbers all spin
+              together as the user turns the device. The bezel is rotated by
+              -continuous so that as the live heading increases, the bezel
+              rotates counter-clockwise (the "N" tick moves to the left). */}
+          <g
+            style={{
+              transform: `rotate(${-continuous}deg)`,
+              transformOrigin: `${cx}px ${cy}px`,
+              transition: 'none',
+            }}
+          >
+            {ticks.map(({ deg, major, minor }) => {
+              const angle = (deg - 90) * (Math.PI / 180);
+              const r1 = rOuter - 1;
+              const r2 = major ? rTickMajor : minor ? rTickMinor : rTickMicro;
+              const x1 = cx + r1 * Math.cos(angle);
+              const y1 = cy + r1 * Math.sin(angle);
+              const x2 = cx + r2 * Math.cos(angle);
+              const y2 = cy + r2 * Math.sin(angle);
+              return (
+                <line
+                  key={`tick-${deg}`}
+                  x1={x1}
+                  y1={y1}
+                  x2={x2}
+                  y2={y2}
+                  stroke={
+                    major ? palette.tickMajor : minor ? palette.tickMinor : palette.tickMicro
+                  }
+                  strokeWidth={major ? 1.5 : minor ? 1 : 0.6}
+                  strokeLinecap="round"
+                />
+              );
+            })}
 
-          {/* STATIC cardinal letters (N/E/S/W) */}
-          {CARDINALS.map(({ label, deg }) => {
-            const angle = (deg - 90) * (Math.PI / 180);
-            const r = rCardinal;
-            const x = cx + r * Math.cos(angle);
-            const y = cy + r * Math.sin(angle) + 5;
-            const fill =
-              label === 'N'
-                ? palette.cardinalN
-                : label === 'S'
-                ? palette.cardinalS
-                : palette.cardinal;
-            return (
+            {/* Cardinal letters (N/E/S/W) — placed inward of numbers, rotate with the dial */}
+            {CARDINALS.map(({ label, deg }) => {
+              const angle = (deg - 90) * (Math.PI / 180);
+              const r = rCardinal;
+              const x = cx + r * Math.cos(angle);
+              const y = cy + r * Math.sin(angle) + 5;
+              const fill =
+                label === 'N'
+                  ? palette.cardinalN
+                  : label === 'S'
+                  ? palette.cardinalS
+                  : palette.cardinal;
+              return (
+                <text
+                  key={`card-${label}`}
+                  x={x}
+                  y={y}
+                  textAnchor="middle"
+                  fill={fill}
+                  fontSize="14"
+                  fontWeight="700"
+                  fontFamily="'Google Sans Flex', 'Google Sans Text', sans-serif"
+                >
+                  {label}
+                </text>
+              );
+            })}
+
+            {/* Outer degree numbers — placed INSIDE the rotating bezel group
+                so they stay anchored to their tick (i.e. the "30" digit moves
+                around the ring as the dial spins). Each digit is COUNTER-
+                ROTATED by `continuous` so its world orientation stays UPRIGHT
+                relative to the viewer — it never tumbles or tilts as the dial
+                rotates. Net effect: the digits move with their tick but
+                always read normally to the user. */}
+            {numberElements.map(({ deg, number, x, y }) => (
               <text
-                key={`card-${label}`}
+                key={`num-${deg}`}
                 x={x}
                 y={y}
+                fill={palette.numColor}
+                fontSize="10"
+                fontWeight="600"
                 textAnchor="middle"
-                fill={fill}
-                fontSize="14"
-                fontWeight="700"
+                dominantBaseline="middle"
                 fontFamily="'Google Sans Flex', 'Google Sans Text', sans-serif"
+                transform={`rotate(${continuous} ${x} ${y})`}
               >
-                {label}
+                {number}
               </text>
-            );
-          })}
-
-          {/* STATIC outer degree numbers — anchored to world position so they
-              do NOT rotate as the dial "rotates". Each digit is locally
-              rotated by `deg` so the digit's "up" axis points radially
-              outward from the center (perpendicular to the radial tick mark). */}
-          {numberElements.map(({ deg, number, x, y, rotation }) => (
-            <text
-              key={`num-${deg}`}
-              x={x}
-              y={y}
-              fill={palette.numColor}
-              fontSize="10"
-              fontWeight="600"
-              textAnchor="middle"
-              dominantBaseline="middle"
-              fontFamily="'Google Sans Flex', 'Google Sans Text', sans-serif"
-              transform={`rotate(${rotation} ${x} ${y})`}
-            >
-              {number}
-            </text>
-          ))}
+            ))}
+          </g>
 
           {/* Center grey circle — static, holds the degree value */}
           <circle
