@@ -10,12 +10,16 @@ interface SettingsPanelProps {
   headingData: HeadingData;
   activeMapLayer: MapLayerType;
   onChangeMapLayer: (layer: MapLayerType) => void;
+  /** Derived accelerometer health: true when the recent motion samples show
+   *  high variance that hasn't been smoothed out — i.e. the sensor is
+   *  "drifting" and the device should be recalibrated. */
+  isAccelDrifting?: boolean;
 }
 
 const MAP_LAYER_OPTIONS: { key: MapLayerType; label: string; icon: string }[] = [
   { key: 'dark', label: 'Dark', icon: 'dark_mode' },
-  { key: 'street', label: 'Light', icon: 'light_mode' },
-  { key: 'satellite', label: 'Sat', icon: 'satellite_alt' },
+  { key: 'street', label: 'Light', icon: 'wb_sunny' },
+  { key: 'satellite', label: 'Sat', icon: 'satellite' },
 ];
 
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({
@@ -25,6 +29,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   headingData,
   activeMapLayer,
   onChangeMapLayer,
+  isAccelDrifting = false,
 }) => {
   const { isDark, toggleTheme } = useTheme();
 
@@ -78,9 +83,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
       : { label: 'Standby', tone: 'warning' as const }
     : { label: 'Unavailable', tone: 'error' as const };
   const accelStatus = sensorStatus.accelAvailable
-    ? sensorStatus.hasHardwareMotion
+    ? isAccelDrifting
+      ? { label: 'Drifting', tone: 'error' as const }
+      : sensorStatus.hasHardwareMotion
       ? { label: 'Calibrated', tone: 'success' as const }
-      : { label: 'Drifting', tone: 'warning' as const }
+      : { label: 'Standby', tone: 'warning' as const }
     : { label: 'Unavailable', tone: 'error' as const };
   const magStatus = headingData.source === 'absolute' || headingData.source === 'webkit'
     ? { label: 'Nominal', tone: 'success' as const }
@@ -139,16 +146,16 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             aria-label="Back"
             className="flex items-center justify-center"
             style={{
-              width: 40,
-              height: 40,
-              borderRadius: 'var(--radius-full)',
+              width: 32,
+              height: 32,
+              borderRadius: 'var(--radius-md)',
               background: 'transparent',
               border: 'none',
               color: 'var(--color-text-primary)',
               cursor: 'pointer',
             }}
           >
-            <Icon name="arrow_back" size={22} />
+            <Icon name="arrow_back" size={20} />
           </button>
           <div
             className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
@@ -189,7 +196,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               title="Accelerometer"
               status={accelStatus.label}
               statusTone={accelStatus.tone}
-              trailingDot={accelStatus.tone === 'warning'}
+              trailingDot={accelStatus.tone === 'error'}
             />
             <Divider />
             <Row
@@ -221,19 +228,25 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                       onClick={() => onChangeMapLayer(key)}
                       className="flex flex-col items-center gap-2"
                       style={{
-                        padding: '12px 8px',
+                        padding: '14px 8px',
                         borderRadius: 'var(--radius-md)',
-                        background: active ? 'var(--color-accent-soft)' : 'var(--color-bg-inset)',
-                        border: `1px solid ${active ? 'var(--color-accent)' : 'var(--color-border)'}`,
-                        color: active ? 'var(--color-accent-text)' : 'var(--color-text-secondary)',
+                        background: active
+                          ? 'var(--color-accent-soft)'
+                          : 'var(--color-bg-inset)',
+                        border: `1px solid ${
+                          active ? 'var(--color-accent)' : 'var(--color-border)'
+                        }`,
+                        color: active
+                          ? 'var(--color-accent-text)'
+                          : 'var(--color-text-secondary)',
                         cursor: 'pointer',
                         transition: 'all 0.2s ease',
                       }}
                     >
-                      <Icon name={icon} size={22} />
+                      <Icon name={icon} size={26} />
                       <span
                         className="uppercase font-bold"
-                        style={{ fontSize: '10px', letterSpacing: '0.08em' }}
+                        style={{ fontSize: '11px', letterSpacing: '0.08em' }}
                       >
                         {label}
                       </span>
@@ -357,9 +370,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             >
               System v2.4.1 (Build 8902)
               <br />
-              <span style={{ color: 'var(--color-text-tertiary)', opacity: 0.7 }}>
-                Last synced: just now
-              </span>
+              <span style={{ opacity: 0.7 }}>Last synced: 2m ago</span>
             </div>
           </div>
         </div>
@@ -476,7 +487,14 @@ const Row: React.FC<{
         {trailingDot && (
           <span
             className="status-dot"
-            style={{ background: 'var(--color-error)' }}
+            style={{
+              background:
+                statusTone === 'error'
+                  ? 'var(--color-error)'
+                  : statusTone === 'warning'
+                  ? 'var(--color-warning)'
+                  : 'var(--color-success)',
+            }}
           />
         )}
         <Icon name="chevron_right" size={20} style={{ color: 'var(--color-text-tertiary)' }} />

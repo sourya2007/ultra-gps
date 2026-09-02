@@ -58,6 +58,8 @@ export const MapView: React.FC<MapViewProps> = ({
           },
         };
       case 'dark':
+        // Dark Matter: full Google-Maps-like dark style with all roads, buildings,
+        // POIs, parks, water bodies, and labels rendered in dark theme.
         return {
           url: `https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png?key=${CARTO_API_KEY}`,
           options: {
@@ -69,8 +71,10 @@ export const MapView: React.FC<MapViewProps> = ({
         };
       case 'street':
       default:
+        // Voyager: full Google-Maps-like light style with roads, buildings, parks,
+        // water bodies, POIs, and labels.
         return {
-          url: `https://{s}.basemaps.cartocdn.com/rastertiles/light_all/{z}/{x}/{y}.png?key=${CARTO_API_KEY}`,
+          url: `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=${CARTO_API_KEY}`,
           options: {
             maxZoom: 26,
             maxNativeZoom: 19,

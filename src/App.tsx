@@ -30,8 +30,6 @@ const PAGE_TITLE: Record<DockTab, string> = {
 
 const DOCK_HEIGHT = 64;
 
-const HEADER_HEIGHT = 64;
-
 interface MapBlockProps {
   location: Coordinates;
   heading: number;
@@ -191,6 +189,23 @@ export const App: React.FC = () => {
     requestSensorPermissions,
   };
 
+  // Derive accelerometer "drift" state from the variance of recent motion
+  // samples. High short-window variance (relative to a stationary baseline)
+  // suggests the sensor hasn't been calibrated or is being affected by
+  // high-frequency noise. The SettingsPanel surfaces this as a status row.
+  const isAccelDrifting = (() => {
+    const samples = state.recentMotion;
+    if (!samples || samples.length < 10) return false;
+    const lastN = samples.slice(-20);
+    const mean =
+      lastN.reduce((s, m) => s + m.filteredMagnitude, 0) / Math.max(lastN.length, 1);
+    const variance =
+      lastN.reduce((s, m) => s + (m.filteredMagnitude - mean) ** 2, 0) /
+      Math.max(lastN.length, 1);
+    // Drift if std-dev exceeds ~0.5 m/s² (raw accelerometer jitter)
+    return Math.sqrt(variance) > 0.5;
+  })();
+
   return (
     <div
       className="flex flex-col w-full h-screen overflow-hidden select-none"
@@ -213,11 +228,13 @@ export const App: React.FC = () => {
         onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
-      {/* Page content. paddingTop accounts for fixed header; paddingBottom for fixed bottom dock. */}
+      {/* Page content. The Header is a normal flex child above this <main>
+          (NOT position:fixed), so the page already starts directly below
+          the 64px header — no extra top padding is needed. The bottom dock
+          is fixed-positioned, so we reserve space at the bottom for it. */}
       <main
         className="flex-1 min-h-0 overflow-y-auto md:overflow-hidden scrollbar-hide"
         style={{
-          paddingTop: HEADER_HEIGHT,
           paddingBottom: `calc(${DOCK_HEIGHT}px + env(safe-area-inset-bottom, 0px))`,
           background: 'var(--color-bg-primary)',
         }}
@@ -225,7 +242,7 @@ export const App: React.FC = () => {
         {/* MAP page */}
         {activeTab === 'map' && (
           <div
-            className="flex flex-col gap-3 p-4
+            className="flex flex-col gap-3 px-4 pb-4
                        md:grid md:grid-cols-[minmax(0,1fr)_380px] md:gap-4 md:p-5
                        lg:grid-cols-[minmax(0,1fr)_420px] lg:gap-5 lg:p-6
                        md:h-full md:overflow-hidden"
@@ -262,7 +279,7 @@ export const App: React.FC = () => {
             (COORDS/SPEED/HEADING/DISTANCE) lives on the MAP page only. */}
         {activeTab === 'telemetry' && (
           <div
-            className="flex flex-col gap-3 p-4
+            className="flex flex-col gap-3 px-4 pb-4
                        md:grid md:grid-cols-[minmax(0,1fr)_380px] md:gap-4 md:p-5
                        md:h-full md:overflow-hidden"
           >
@@ -314,7 +331,7 @@ export const App: React.FC = () => {
             shows the AI model status + simulator controls. */}
         {activeTab === 'analysis' && !isDesktopViewport && (
           <div
-            className="flex flex-col gap-3 p-4
+            className="flex flex-col gap-3 px-4 pb-4
                        md:h-full md:overflow-hidden"
           >
             <div
@@ -373,6 +390,7 @@ export const App: React.FC = () => {
         headingData={state.headingData}
         activeMapLayer={mapLayer}
         onChangeMapLayer={setMapLayer}
+        isAccelDrifting={isAccelDrifting}
       />
     </div>
   );
