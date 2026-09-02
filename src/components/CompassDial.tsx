@@ -376,7 +376,8 @@ export const CompassDial: React.FC<CompassDialProps> = ({
               );
             })}
 
-            {/* Cardinal letters (N/E/S/W) — placed inward of numbers, rotate with the dial */}
+            {/* Cardinal letters (N/E/S/W) — placed inward of numbers, rotate with the dial
+                but counter-rotate so they always read upright to the viewer. */}
             {CARDINALS.map(({ label, deg }) => {
               const angle = (deg - 90) * (Math.PI / 180);
               const r = rCardinal;
@@ -394,10 +395,12 @@ export const CompassDial: React.FC<CompassDialProps> = ({
                   x={x}
                   y={y}
                   textAnchor="middle"
+                  dominantBaseline="middle"
                   fill={fill}
                   fontSize="14"
                   fontWeight="700"
                   fontFamily="'Google Sans Flex', 'Google Sans Text', sans-serif"
+                  transform={`rotate(${continuous} ${x} ${y})`}
                 >
                   {label}
                 </text>
