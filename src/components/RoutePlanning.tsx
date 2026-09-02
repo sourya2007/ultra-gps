@@ -184,7 +184,7 @@ export const RoutePlanning: React.FC = () => {
       <div
         className="relative w-full"
         style={{
-          height: 360,
+          height: 'clamp(220px, 40vh, 360px)',
           borderRadius: 'var(--radius-lg)',
           overflow: 'hidden',
           background: isDark

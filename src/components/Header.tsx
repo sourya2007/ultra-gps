@@ -29,9 +29,9 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header
-      className="flex items-center justify-between gap-4 px-5 panel-section"
+      className="flex items-center justify-between gap-2 px-3 sm:px-5 panel-section"
       style={{
-        height: 64,
+        height: 56,
         paddingTop: 'env(safe-area-inset-top, 0px)',
         background: 'var(--color-bg-primary)',
         borderBottom: '1px solid var(--color-border)',
@@ -91,7 +91,7 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Right: Actions */}
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex items-center gap-1 sm:gap-2 shrink-0">
         {onLocateNow && (
           <button
             onClick={onLocateNow}
@@ -121,8 +121,15 @@ export const Header: React.FC<HeaderProps> = ({
 
         <button
           onClick={toggleTheme}
-          className="btn"
-          style={{ padding: '6px 10px' }}
+          className="flex items-center justify-center"
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: 'var(--radius-full)',
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+          }}
           title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
         >
           <Icon
@@ -136,8 +143,15 @@ export const Header: React.FC<HeaderProps> = ({
         {onOpenSettings && (
           <button
             onClick={onOpenSettings}
-            className="btn"
-            style={{ padding: '6px 10px' }}
+            className="flex items-center justify-center"
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 'var(--radius-full)',
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+            }}
             title="System Settings"
             aria-label="System Settings"
           >
@@ -172,7 +186,7 @@ export const Header: React.FC<HeaderProps> = ({
 
         {isAiLoaded && (
           <span
-            className="badge"
+            className="badge hidden sm:inline-flex"
             style={{
               background: 'var(--color-success-soft)',
               color: 'var(--color-success-text)',

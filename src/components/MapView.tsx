@@ -416,7 +416,7 @@ export const MapView: React.FC<MapViewProps> = ({
       )}
 
       {/* Right Controls — circular, matching reference */}
-      <div className="absolute bottom-20 lg:bottom-6 right-4 z-[500] flex flex-col gap-2">
+      <div className="absolute bottom-4 lg:bottom-6 right-4 z-[500] flex flex-col gap-2">
         <button
           onClick={handleCenterMap}
           className="flex items-center justify-center"

@@ -106,7 +106,7 @@ export const FusionHealth: React.FC = () => {
         <div className="flex flex-col items-center justify-center py-4 relative z-10">
           <div
             className="relative flex items-center justify-center"
-            style={{ width: 180, height: 180 }}
+            style={{ width: 'min(180px, 45vw)', height: 'min(180px, 45vw)' }}
           >
             <svg
               className="absolute inset-0 w-full h-full"
@@ -252,7 +252,7 @@ export const FusionHealth: React.FC = () => {
         <div
           className="relative w-full overflow-hidden"
           style={{
-            height: 120,
+            height: 'clamp(80px, 18vh, 120px)',
             borderBottom: '1px solid var(--color-border)',
             borderLeft: '1px solid var(--color-border)',
             paddingLeft: 4,
@@ -336,7 +336,7 @@ export const FusionHealth: React.FC = () => {
           className="relative"
           style={{
             width: '100%',
-            height: 140,
+            height: 'clamp(100px, 20vh, 140px)',
             background: isDark
               ? 'radial-gradient(ellipse at center, rgba(20,20,20,1) 0%, rgba(0,0,0,1) 100%)'
               : 'radial-gradient(ellipse at center, rgba(220,220,220,1) 0%, rgba(180,180,180,1) 100%)',

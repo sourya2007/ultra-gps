@@ -116,7 +116,7 @@ export const AILab: React.FC = () => {
         <div
           className="relative w-full"
           style={{
-            height: 110,
+            height: 'clamp(80px, 16vh, 110px)',
             background: 'var(--color-canvas-bg)',
             borderRadius: 'var(--radius-sm)',
             overflow: 'hidden',

@@ -33,10 +33,9 @@ export const MobileDock: React.FC<MobileDockProps> = ({
       aria-label="Primary"
     >
       <div
-        className="flex items-center h-16 overflow-x-auto scrollbar-hide"
+        className="flex items-center h-16"
         style={{
-          justifyContent: 'space-around',
-          padding: '0 max(16px, env(safe-area-inset-left, 0px))',
+          padding: '0 env(safe-area-inset-left, 0px)',
         }}
       >
         {tabs.map(({ key, label, icon, hideOn }) => {
@@ -47,9 +46,9 @@ export const MobileDock: React.FC<MobileDockProps> = ({
               key={key}
               type="button"
               onClick={() => onChangeTab(key)}
-              className={`flex flex-col items-center gap-1 transition-colors ${visibilityClass}`}
+              className={`flex-1 flex flex-col items-center gap-1 transition-colors ${visibilityClass}`}
               style={{
-                minWidth: 56,
+                minWidth: 0,
                 color: isActive
                   ? 'var(--color-accent-text)'
                   : 'var(--color-text-tertiary)',
@@ -60,12 +59,12 @@ export const MobileDock: React.FC<MobileDockProps> = ({
               }}
               aria-current={isActive ? 'page' : undefined}
             >
-              <Icon name={icon} size={22} filled={isActive} />
+              <Icon name={icon} size={20} filled={isActive} />
               <span
                 className="uppercase font-bold"
                 style={{
-                  fontSize: 10,
-                  letterSpacing: '0.08em',
+                  fontSize: 9,
+                  letterSpacing: '0.04em',
                 }}
               >
                 {label}

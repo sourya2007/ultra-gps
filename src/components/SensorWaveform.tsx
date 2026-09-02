@@ -224,7 +224,7 @@ export const SensorWaveform: React.FC<SensorWaveformProps> = ({
     background: bgColor,
     color: '#e5e2e1',
     borderRadius: 'var(--radius-xl)',
-    padding: 20,
+    padding: 'clamp(12px, 3vw, 20px)',
     border: '1px solid var(--color-border)',
     position: 'relative',
     overflow: 'hidden',
@@ -233,7 +233,7 @@ export const SensorWaveform: React.FC<SensorWaveformProps> = ({
 
   const canvasWrapStyle: React.CSSProperties = {
     width: '100%',
-    height: 80,
+    height: 'clamp(60px, 12vh, 80px)',
     overflow: 'hidden',
     position: 'relative',
     borderRadius: 6,
@@ -288,7 +288,7 @@ export const SensorWaveform: React.FC<SensorWaveformProps> = ({
 
       {/* Live counters row */}
       <div
-        className="flex flex-wrap items-center gap-2"
+        className="flex flex-nowrap items-center gap-2 overflow-x-auto scrollbar-hide"
         style={{ position: 'relative', zIndex: 1 }}
       >
         <Pill label="ACCEL MAG" value={latest ? `${latest.filteredMagnitude.toFixed(2)} m/s²` : '0.00 m/s²'} color={accent} />
@@ -355,7 +355,7 @@ export const SensorWaveform: React.FC<SensorWaveformProps> = ({
 
       {/* Footer */}
       <div
-        className="flex flex-wrap items-center justify-between gap-2 pt-4"
+        className="flex flex-nowrap items-center justify-between gap-2 pt-4"
         style={{
           borderTop: '1px solid var(--color-border)',
           position: 'relative',
@@ -465,7 +465,7 @@ const GyroRow: React.FC<{
     <div
       style={{
         flex: 1,
-        height: 60,
+        height: 'clamp(48px, 10vh, 60px)',
         overflow: 'hidden',
         position: 'relative',
         borderRadius: 6,

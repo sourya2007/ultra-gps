@@ -540,7 +540,7 @@ export const App: React.FC = () => {
                        md:h-full md:overflow-hidden"
           >
             <div
-              className="h-[min(42vh,380px)] flex-none md:flex-1 md:min-h-0 md:h-full"
+              className="h-[min(36vh,320px)] flex-none md:flex-1 md:min-h-0 md:h-full"
             >
               <MapBlock {...mapProps} />
             </div>
@@ -572,7 +572,7 @@ export const App: React.FC = () => {
             <div
               className="flex flex-col gap-3 md:min-h-0 md:h-full md:overflow-y-auto scrollbar-hide"
             >
-              <div className="h-[min(34vh,320px)] flex-none md:flex-none md:h-[min(34vh,360px)]">
+              <div className="h-[min(28vh,260px)] flex-none md:flex-none md:h-[min(34vh,360px)]">
                 <MapBlock {...mapProps} />
               </div>
               <div className="md:hidden">
